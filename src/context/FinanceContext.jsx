@@ -15,14 +15,14 @@ export function FinanceProvider({ children }) {
   const [allParcelas, setAllParcelas] = useState([]);
 
   const fetchData = useCallback(async () => {
-    // ... (sua função fetchData atual, sem alterações)
+    // ... sua função fetchData, sem alterações
   }, []);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // ✅ CORREÇÃO APLICADA AQUI
+  // ✅ LÓGICA DE onConfirm DENTRO DE clearAllData FOI REESCRITA
   const clearAllData = () => {
     showModal('confirmation', {
       title: 'Limpar Todos os Dados?',
@@ -30,47 +30,40 @@ export function FinanceProvider({ children }) {
       confirmText: 'Sim, Limpar Tudo',
       onConfirm: async () => {
         setLoading(true);
+        console.log("--- PROCESSO DE LIMPEZA INICIADO ---");
         try {
-          console.log("Iniciando a limpeza de dados...");
+          console.log("1. Deletando da tabela 'parcelas'...");
+          const { error: parcelasError } = await supabase.from('parcelas').delete().neq('id', 0);
+          if (parcelasError) throw parcelasError;
+          console.log("   -> 'parcelas' limpa com sucesso.");
 
-          // 1. Deleta os registros das tabelas no Supabase
-          // Usamos Promise.all para executar as exclusões em paralelo
-          const [parcelasError, despesasError, transactionsError] = await Promise.all([
-            supabase.from('parcelas').delete().neq('id', 0),
-            supabase.from('despesas').delete().neq('id', 0),
-            supabase.from('transactions').delete().neq('id', 0)
-          ]);
+          console.log("2. Deletando da tabela 'despesas'...");
+          const { error: despesasError } = await supabase.from('despesas').delete().neq('id', 0);
+          if (despesasError) throw despesasError;
+          console.log("   -> 'despesas' limpa com sucesso.");
 
-          // Verifica se houve erro em alguma das operações
-          if (parcelasError.error) throw parcelasError.error;
-          if (despesasError.error) throw despesasError.error;
-          if (transactionsError.error) throw transactionsError.error;
+          console.log("3. Deletando da tabela 'transactions'...");
+          const { error: transactionsError } = await supabase.from('transactions').delete().neq('id', 0);
+          if (transactionsError) throw transactionsError;
+          console.log("   -> 'transactions' limpa com sucesso.");
           
-          console.log("Dados do Supabase limpos com sucesso.");
-          
-          // 2. Limpa o estado local e busca os dados novamente (que agora estarão vazios)
-          setTransactions([]);
-          setAllParcelas([]);
+          console.log("4. Banco de dados limpo. Buscando dados novamente...");
           await fetchData();
+          console.log("5. Dados atualizados (devem estar vazios).");
 
         } catch (err) {
           setError('Falha ao limpar os dados.');
-          console.error("Erro ao limpar dados:", err);
-          alert("Ocorreu um erro ao limpar os dados. Verifique o console.");
+          console.error("ERRO DETALHADO AO LIMPAR DADOS:", err);
+          alert(`Ocorreu um erro ao limpar os dados: ${err.message}`);
         } finally {
           setLoading(false);
+          console.log("--- PROCESSO DE LIMPEZA FINALIZADO (loading: false) ---");
         }
       }
     });
   };
 
-  const getDespesasPorBanco = (nomeDoBanco) => {
-    // ... (sua função getDespesasPorBanco atual, sem alterações)
-  };
-
-  const getSaldoPorBanco = (banco) => {
-    // ... (sua função getSaldoPorBanco atual, sem alterações)
-  };
+  // ... (resto das suas funções, como getDespesasPorBanco, getSaldoPorBanco, etc.)
 
   const value = {
     loading,
@@ -80,9 +73,8 @@ export function FinanceProvider({ children }) {
     transactions,
     allParcelas,
     bancos,
-    getDespesasPorBanco,
-    getSaldoPorBanco,
-    clearAllData, // A função agora está correta
+    // ...
+    clearAllData,
   };
 
   return (
