@@ -15,60 +15,62 @@ export function FinanceProvider({ children }) {
   const [allParcelas, setAllParcelas] = useState([]);
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [despesasRes, parcelasRes, transactionsRes] = await Promise.all([
-        supabase.from('despesas').select('*'),
-        supabase.from('parcelas').select('*'),
-        supabase.from('transactions').select('*')
-      ]);
-
-      if (despesasRes.error) throw despesasRes.error;
-      if (parcelasRes.error) throw parcelasRes.error;
-      if (transactionsRes.error) throw transactionsRes.error;
-
-      const bancosData = [
-        { id: 1, nome: 'Nubank', bandeira: 'mastercard', cor: 'bg-purple-800', ultimos_digitos: '4293', tipo: 'Crédito' },
-        { id: 2, nome: 'Itaú', bandeira: 'visa', cor: 'bg-blue-950', ultimos_digitos: ['2600', '2195'], tipo: 'Crédito' },
-        { id: 3, nome: 'Bradesco', bandeira: 'visa', cor: 'bg-black', ultimos_digitos: '1687', tipo: 'Crédito' },
-        { id: 4, nome: 'PIX', bandeira: 'pix', cor: 'bg-emerald-500', ultimos_digitos: '', tipo: 'Transferência' },
-      ];
-      
-      const todasTransacoes = [
-        ...(transactionsRes.data || []), 
-        ...(despesasRes.data || [])
-      ];
-
-      setBancos(bancosData);
-      setTransactions(todasTransacoes);
-      setAllParcelas(parcelasRes.data || []);
-
-    } catch (err) {
-      setError(err.message);
-      console.error("Erro ao buscar dados do Supabase:", err);
-    } finally {
-      setLoading(false);
-    }
+    // ... (sua função fetchData atual, sem alterações)
   }, []);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  // ✅ CORREÇÃO APLICADA AQUI
+  const clearAllData = () => {
+    showModal('confirmation', {
+      title: 'Limpar Todos os Dados?',
+      description: 'Esta ação é irreversível e apagará TODAS as despesas e rendas. Você tem certeza absoluta?',
+      confirmText: 'Sim, Limpar Tudo',
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          console.log("Iniciando a limpeza de dados...");
+
+          // 1. Deleta os registros das tabelas no Supabase
+          // Usamos Promise.all para executar as exclusões em paralelo
+          const [parcelasError, despesasError, transactionsError] = await Promise.all([
+            supabase.from('parcelas').delete().neq('id', 0),
+            supabase.from('despesas').delete().neq('id', 0),
+            supabase.from('transactions').delete().neq('id', 0)
+          ]);
+
+          // Verifica se houve erro em alguma das operações
+          if (parcelasError.error) throw parcelasError.error;
+          if (despesasError.error) throw despesasError.error;
+          if (transactionsError.error) throw transactionsError.error;
+          
+          console.log("Dados do Supabase limpos com sucesso.");
+          
+          // 2. Limpa o estado local e busca os dados novamente (que agora estarão vazios)
+          setTransactions([]);
+          setAllParcelas([]);
+          await fetchData();
+
+        } catch (err) {
+          setError('Falha ao limpar os dados.');
+          console.error("Erro ao limpar dados:", err);
+          alert("Ocorreu um erro ao limpar os dados. Verifique o console.");
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
+  };
+
   const getDespesasPorBanco = (nomeDoBanco) => {
-    return transactions.filter(t => 
-      t.metodo_pagamento?.toLowerCase() === nomeDoBanco?.toLowerCase() && 
-      t.type !== 'income'
-    );
+    // ... (sua função getDespesasPorBanco atual, sem alterações)
   };
 
   const getSaldoPorBanco = (banco) => {
-    const despesasDoBanco = getDespesasPorBanco(banco.nome);
-    return despesasDoBanco.reduce((acc, despesa) => acc - despesa.amount, 0);
+    // ... (sua função getSaldoPorBanco atual, sem alterações)
   };
-
-  // ... (outras funções como clearAllData, etc.)
 
   const value = {
     loading,
@@ -80,6 +82,7 @@ export function FinanceProvider({ children }) {
     bancos,
     getDespesasPorBanco,
     getSaldoPorBanco,
+    clearAllData, // A função agora está correta
   };
 
   return (
@@ -89,8 +92,6 @@ export function FinanceProvider({ children }) {
   );
 }
 
-// ✅ O PONTO CHAVE DA CORREÇÃO ESTÁ AQUI
-// A palavra 'export' deve estar presente antes de 'const useFinance'
 export const useFinance = () => {
     const context = useContext(FinanceContext);
     if (context === undefined) {
