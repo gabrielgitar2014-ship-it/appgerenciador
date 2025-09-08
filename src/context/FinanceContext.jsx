@@ -1,50 +1,37 @@
-import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
-import { useModal } from './ModalContext';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 
 const FinanceContext = createContext();
 
-export function FinanceProvider({ children }) {
-  const { showModal } = useModal();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [bancos, setBancos] = useState([]);
+export const useFinance = () => useContext(FinanceContext);
+
+export const FinanceProvider = ({ children }) => {
   const [transactions, setTransactions] = useState([]);
   const [allParcelas, setAllParcelas] = useState([]);
+  const [bancos, setBancos] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
-      const [despesasRes, parcelasRes, transactionsRes] = await Promise.all([
-        supabase.from('despesas').select('*'),
-        supabase.from('parcelas').select('*'),
-        supabase.from('transactions').select('*')
-      ]);
+      const { data: bancosData, error: bancosError } = await supabase.from('bancos').select('*');
+      if (bancosError) throw bancosError;
+      setBancos(bancosData || []);
 
-      if (despesasRes.error) throw despesasRes.error;
-      if (parcelasRes.error) throw parcelasRes.error;
-      if (transactionsRes.error) throw transactionsRes.error;
+      const { data: transactionsData, error: transactionsError } = await supabase.from('transactions').select('*');
+      if (transactionsError) throw transactionsError;
 
-      const bancosData = [
-        { id: 1, nome: 'Nubank', bandeira: 'mastercard', cor: 'bg-purple-800', ultimos_digitos: '4293', tipo: 'Crédito' },
-        { id: 2, nome: 'Itaú', bandeira: 'visa', cor: 'bg-blue-950', ultimos_digitos: ['2600', '5598'], tipo: 'Crédito' },
-        { id: 3, nome: 'Bradesco', bandeira: 'visa', cor: 'bg-black', ultimos_digitos: '1687', tipo: 'Crédito' },
-        { id: 4, nome: 'PIX', bandeira: 'pix', cor: 'bg-emerald-500', ultimos_digitos: '', tipo: 'Transferência' },
-      ];
+      const { data: despesasData, error: despesasError } = await supabase.from('despesas').select('*');
+      if (despesasError) throw despesasError;
       
-      const todasTransacoes = [
-        ...(transactionsRes.data || []), 
-        ...(despesasRes.data || [])
-      ];
+      setTransactions([...(transactionsData || []), ...(despesasData || [])]);
 
-      setBancos(bancosData);
-      setTransactions(todasTransacoes);
-      setAllParcelas(parcelasRes.data || []);
+      const { data: parcelasData, error: parcelasError } = await supabase.from('parcelas').select('*');
+      if (parcelasError) throw parcelasError;
+      setAllParcelas(parcelasData || []);
 
-    } catch (err) {
-      setError(err.message);
-      console.error("Erro ao buscar dados do Supabase:", err);
+    } catch (error) {
+      console.error("Erro ao buscar dados financeiros:", error.message);
     } finally {
       setLoading(false);
     }
@@ -54,79 +41,123 @@ export function FinanceProvider({ children }) {
     fetchData();
   }, [fetchData]);
 
-  const deleteDespesa = async (despesaObject) => {
-    // Verifica se é uma despesa fixa (da tabela 'transactions')
-    if (despesaObject.is_fixed) {
-      console.log("Deletando despesa fixa com ID:", despesaObject.id);
-      const { error } = await supabase.from('transactions').delete().eq('id', despesaObject.id);
-      if (error) {
-        console.error("Erro ao deletar despesa fixa:", error);
-        alert(`Erro: ${error.message}`);
-      }
-    } else {
-      // É uma despesa variável (da tabela 'despesas' e 'parcelas')
-      // O ID principal da compra está em 'despesa_id'
-      const despesaId = despesaObject.despesa_id;
-      if (!despesaId) {
-        console.error("Objeto da despesa não contém 'despesa_id'", despesaObject);
-        alert("Erro: Não foi possível identificar a despesa principal para excluir.");
-        return;
-      }
-      
-      console.log(`Deletando despesa variável e suas parcelas (ID principal: ${despesaId})`);
-      
-      // 1. Deleta todas as parcelas associadas
-      const { error: parcelasError } = await supabase.from('parcelas').delete().eq('despesa_id', despesaId);
-      if (parcelasError) {
-        console.error("Erro ao deletar parcelas:", parcelasError);
-        alert(`Erro: ${parcelasError.message}`);
-        return;
-      }
-
-      // 2. Deleta a despesa principal
-      const { error: despesaError } = await supabase.from('despesas').delete().eq('id', despesaId);
-      if (despesaError) {
-        console.error("Erro ao deletar despesa principal:", despesaError);
-        alert(`Erro: ${despesaError.message}`);
-      }
-    }
-  };
-
   const getSaldoPorBanco = (banco, selectedMonth) => {
-    const despesasFixasDoMes = transactions.filter(t => 
-      t.metodo_pagamento?.toLowerCase() === banco.nome?.toLowerCase() &&
-      t.type === 'expense' &&
-      t.is_fixed === true &&
+    if (!banco || !selectedMonth) return 0;
+
+    const bancoNomeLowerCase = banco.nome.toLowerCase();
+
+    const despesasFixas = transactions.filter(t =>
+      t.is_fixed &&
+      t.metodo_pagamento?.toLowerCase() === bancoNomeLowerCase &&
       t.date?.startsWith(selectedMonth)
     );
 
     const despesasPrincipaisDoBanco = transactions.filter(t => 
-      t.metodo_pagamento?.toLowerCase() === banco.nome?.toLowerCase() &&
-      !t.is_fixed 
+      !t.is_fixed &&
+      t.metodo_pagamento?.toLowerCase() === bancoNomeLowerCase
     );
     const idsDespesasVariaveis = despesasPrincipaisDoBanco.map(d => d.id);
-
+    
     const parcelasVariaveisDoMes = allParcelas.filter(p => 
-      idsDespesasVariaveis.includes(p.despesa_id) &&
+      idsDespesasVariaveis.includes(p.despesa_id) && 
       p.data_parcela?.startsWith(selectedMonth)
     );
 
-    const totalFixo = despesasFixasDoMes.reduce((acc, despesa) => acc - despesa.amount, 0);
-    const totalVariavel = parcelasVariaveisDoMes.reduce((acc, parcela) => acc - parcela.amount, 0);
+    const totalFixo = despesasFixas.reduce((acc, t) => acc + t.amount, 0);
+    const totalVariavel = parcelasVariaveisDoMes.reduce((acc, p) => acc + p.amount, 0);
 
     return totalFixo + totalVariavel;
   };
   
+  const addDespesa = async (despesaData) => {
+    // Implemente a lógica para adicionar nova despesa se necessário
+    console.log("Adicionando despesa:", despesaData);
+    // Exemplo: await supabase.from('despesas').insert([despesaData]);
+    await fetchData();
+  };
+  
+  const deleteDespesa = async (despesa) => {
+    try {
+        if (despesa.is_fixed) {
+            const { error } = await supabase.from('transactions').delete().eq('id', despesa.id);
+            if (error) throw error;
+        } else {
+            const { error: parcelaError } = await supabase.from('parcelas').delete().eq('id', despesa.id);
+            if (parcelaError) throw parcelaError;
+            // Opcional: verificar se era a última parcela para apagar a despesa "mãe"
+        }
+        await fetchData();
+    } catch (error) {
+        console.error("Erro ao deletar despesa:", error.message);
+    }
+  };
+  
+  const updateDespesa = async (despesaId, updatedData, isParcelada = false) => {
+    setLoading(true);
+    try {
+      if (!isParcelada) {
+        const { error } = await supabase
+          .from('transactions')
+          .update(updatedData)
+          .eq('id', despesaId);
+        if (error) throw error;
+      } else {
+        const { data: despesaAtualizada, error: updateError } = await supabase
+          .from('despesas')
+          .update({
+            description: updatedData.description,
+            amount: updatedData.amount,
+            metodo_pagamento: updatedData.metodo_pagamento,
+            qtd_parcelas: updatedData.qtd_parcelas,
+            mes_inicio_cobranca: updatedData.mes_inicio_cobranca
+          })
+          .eq('id', despesaId)
+          .select()
+          .single();
+          
+        if (updateError) throw updateError;
+        if (!despesaAtualizada) throw new Error("Despesa não encontrada para atualizar.");
+
+        const { error: deleteError } = await supabase.from('parcelas').delete().eq('despesa_id', despesaId);
+        if (deleteError) throw deleteError;
+
+        const valorParcela = despesaAtualizada.amount / despesaAtualizada.qtd_parcelas;
+        const parcelasParaInserir = [];
+        const [anoInicio, mesInicio] = despesaAtualizada.mes_inicio_cobranca.split('-').map(Number);
+        
+        for (let i = 1; i <= despesaAtualizada.qtd_parcelas; i++) {
+          const dataParcela = new Date(anoInicio, mesInicio - 1, 1);
+          dataParcela.setMonth(dataParcela.getMonth() + (i - 1));
+          parcelasParaInserir.push({
+            despesa_id: despesaAtualizada.id,
+            numero_parcela: i,
+            amount: valorParcela,
+            data_parcela: dataParcela.toISOString().split('T')[0],
+            paga: false
+          });
+        }
+
+        const { error: insertError } = await supabase.from('parcelas').insert(parcelasParaInserir);
+        if (insertError) throw insertError;
+      }
+      await fetchData();
+    } catch (error) {
+      console.error("Erro ao atualizar despesa:", error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const value = {
-    loading,
-    error,
-    setError,
-    fetchData,
     transactions,
     allParcelas,
     bancos,
+    loading,
+    fetchData,
     getSaldoPorBanco,
-    deleteDespesa, // Exportando a nova função
+    addDespesa,
+    updateDespesa,
+    deleteDespesa,
   };
 
   return (
@@ -134,12 +165,4 @@ export function FinanceProvider({ children }) {
       {children}
     </FinanceContext.Provider>
   );
-}
-
-export const useFinance = () => {
-    const context = useContext(FinanceContext);
-    if (context === undefined) {
-      throw new Error('useFinance deve ser usado dentro de um FinanceProvider');
-    }
-    return context;
 };
