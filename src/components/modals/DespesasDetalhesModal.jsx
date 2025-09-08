@@ -1,111 +1,112 @@
-// src/components/modals/DespesasDetalhesModal.jsx
-
 import React, { useState, useMemo } from 'react';
 import ParcelamentoDetalhesModal from './ParcelamentoDetalhesModal';
 
-// --- Funções Auxiliares ---
-const formatCurrency = (value) => {
-    if (typeof value !== 'number') return 'R$ --';
-    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const formatCurrency = (v) => {
+  const n = Number(v ?? 0);
+  if (!isFinite(n)) return 'R$ --';
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+const formatDate = (s) => {
+  if (!s) return '—';
+  const iso = /^\d{4}-\d{2}$/.test(s) ? `${s}-01` : s;
+  const d = new Date(`${iso}T00:00:00Z`);
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
 };
 
-const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString + 'T00:00:00Z');
-    return date.toLocaleDateString('pt-BR', {
-      day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC'
-    });
-};
-
-// --- Componente Auxiliar para Itens de Detalhe ---
-const DetailItem = ({ icon, label, children, isButton = false, onClick = () => {} }) => (
-    <div 
-      className={`flex items-center py-2 text-slate-800 dark:text-slate-200 ${isButton ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg -mx-2 px-2' : ''}`}
-      onClick={onClick}
-    >
-      <span className="material-symbols-outlined text-slate-600 dark:text-slate-400 mr-3 self-center">{icon}</span>
-      <div className="flex-1">
-        <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">{label}</p>
-        <div className={`${isButton ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-slate-900 dark:text-white'}`}>{children}</div>
+function DetailItem({ icon, label, children }) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+        <span className="material-symbols-outlined text-base">{icon}</span>
+        <span className="text-sm">{label}</span>
       </div>
-      {isButton && <span className="material-symbols-outlined text-slate-500 self-center">chevron_right</span>}
+      <div className="text-sm text-slate-800 dark:text-slate-100">{children}</div>
     </div>
-);
+  );
+}
 
-// A prop principal agora é 'despesa' e removemos onEdit/onDelete
 export default function DespesasDetalhesModal({ isOpen, onClose, despesa }) {
-    const [isParcelamentoModalOpen, setIsParcelamentoModalOpen] = useState(false);
+  const [showParcelas, setShowParcelas] = useState(false);
+  const d = useMemo(() => {
+    if (!despesa) return null;
+    const qtd = Number(despesa.qtd_parcelas ?? 1);
+    return {
+      ...despesa,
+      amount: Number(despesa.amount ?? 0),
+      qtd_parcelas: qtd,
+      isParcelada: qtd > 1 || Boolean(despesa.isParcelada ?? despesa.isParcelado),
+    };
+  }, [despesa]);
 
-    // Prepara os dados da despesa para serem exibidos
-    const displayData = useMemo(() => {
-        if (!despesa) return null;
-        
-        const isParcelada = despesa.qtd_parcelas > 1;
+  if (!isOpen) return null;
 
-        return {
-            ...despesa,
-            isParcelada,
-            // O valor total da compra é sempre o 'amount' da despesa principal
-            valorTotalCompra: despesa.amount,
-            // Unifica a data, pegando de 'data_compra' ou 'date'
-            displayDate: despesa.data_compra || despesa.date,
-        };
-    }, [despesa]);
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="w-full max-w-xl mx-3 rounded-2xl bg-white dark:bg-slate-800 shadow-2xl p-5">
+          <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-slate-700 mb-4">
+            <h2 className="text-lg font-bold text-slate-800 dark:text-white">Detalhes da Despesa</h2>
+            <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700">
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
 
-    if (!isOpen || !displayData) return null;
+          {!d ? (
+            <div className="py-10 text-center text-slate-500">Carregando...</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <DetailItem icon="description" label="Descrição">
+                  <span className="font-medium">{d.description || '—'}</span>
+                </DetailItem>
 
-    return (
-        <>
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center items-center p-4 transition-opacity duration-300">
-                <div className="relative transform overflow-hidden w-full max-w-md p-6
-                  bg-white dark:bg-slate-800 rounded-2xl
-                  shadow-2xl transition-all animate-fade-in-up">
-                    
-                    <div className="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-slate-700 mb-4">
-                        <h2 className="text-xl font-bold text-slate-800 dark:text-white text-left flex-1 truncate" title={displayData.description || displayData.descricao}>
-                            {displayData.description || displayData.descricao}
-                        </h2>
-                        <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700">
-                            <span className="material-symbols-outlined text-slate-700 dark:text-slate-300">close</span>
-                        </button>
+                <DetailItem icon="account_balance" label="Método / Parcelamento">
+                  {(d.metodo_pagamento || '—')}{' '}
+                  <span className="mx-1 text-slate-400">•</span>{' '}
+                  {d.isParcelada ? `${d.qtd_parcelas}x` : 'À vista'}
+                </DetailItem>
+
+                <DetailItem icon="event" label="Data da Compra">
+                  {formatDate(d.data_compra)}
+                </DetailItem>
+
+                <DetailItem icon="event_repeat" label="Início da Cobrança">
+                  {formatDate(d.mes_inicio_cobranca)}
+                </DetailItem>
+              </div>
+
+              <div className="space-y-3">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                      <span className="material-symbols-outlined text-base">price_check</span>
+                      <span className="text-sm">Valor Total</span>
                     </div>
-
-                    <div className="space-y-1">
-                        <DetailItem icon="shopping_cart" label="Valor Total">
-                            <span className="font-bold text-lg text-red-600 dark:text-red-400">
-                                {formatCurrency(displayData.valorTotalCompra)}
-                            </span>
-                        </DetailItem>
-                        
-                        <DetailItem icon="calendar_today" label="Data da Compra">
-                           {formatDate(displayData.displayDate)}
-                        </DetailItem>
-                        
-                        <DetailItem icon="credit_card" label="Método de Pagamento">
-                            {displayData.metodo_pagamento}
-                        </DetailItem>
-
-                        {displayData.isParcelada && (
-                            <div className="pt-3 mt-3 border-t border-gray-200 dark:border-slate-700">
-                                <DetailItem
-                                    isButton={true}
-                                    onClick={() => setIsParcelamentoModalOpen(true)}
-                                    icon="receipt_long"
-                                    label="Parcelamento"
-                                >
-                                    Exibir Detalhes
-                                </DetailItem>
-                            </div>
-                        )}
-                    </div>
+                    <span className="text-base font-semibold">{formatCurrency(d.amount)}</span>
+                  </div>
                 </div>
-            </div>
 
-            <ParcelamentoDetalhesModal 
-                isOpen={isParcelamentoModalOpen}
-                onClose={() => setIsParcelamentoModalOpen(false)}
-                despesa={displayData}
-            />
-        </>
-    );
+                {d.isParcelada && (
+                  <button
+                    onClick={() => setShowParcelas(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm shadow"
+                  >
+                    <span className="material-symbols-outlined text-base">visibility</span>
+                    Ver parcelamento
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <ParcelamentoDetalhesModal
+        open={showParcelas}
+        onClose={() => setShowParcelas(false)}
+        despesa={d}
+      />
+    </>
+  );
 }
