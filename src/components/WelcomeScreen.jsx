@@ -6,14 +6,14 @@ export default function WelcomeScreen() {
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
-    const timer = setTimeout(() => setVisible(false), 2500); // A tela sumirá após 2.5 segundos
+    const timer = setTimeout(() => setVisible(false), 2500); // A tela sumirá após 2.0 segundos
     return () => clearTimeout(timer);
   }, []);
 
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-700">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-green-600 to-indigo-700">
       <div className="text-center">
         <h1 
           className="text-5xl md:text-7xl text-white font-bold animate-fade-in-down"
@@ -36,3 +36,4 @@ export default function WelcomeScreen() {
     </div>
   );
 }
+
