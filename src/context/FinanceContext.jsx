@@ -54,44 +54,87 @@ export function FinanceProvider({ children }) {
     fetchData();
   }, [fetchData]);
 
-  const deleteDespesa = async (despesaObject) => {
-    // --- INÍCIO DO DIAGNÓSTICO ---
-    console.log("Tentando deletar o seguinte objeto:", despesaObject);
+  // ✅ FUNÇÃO FALTANDO ADICIONADA AQUI
+  const saveFixedExpense = async (expenseData) => {
+    // Modo de Edição: se o objeto já tem um ID
+    if (expenseData.id) {
+      const { data, error } = await supabase
+        .from('transactions')
+        .update({
+          description: expenseData.description,
+          amount: expenseData.amount,
+          date: expenseData.date,
+          metodo_pagamento: expenseData.metodo_pagamento,
+          due_date: expenseData.due_date,
+        })
+        .eq('id', expenseData.id)
+        .select();
 
+      if (error) {
+        console.error("Erro ao atualizar despesa fixa:", error);
+        throw error;
+      }
+      return data;
+    } 
+    
+    // Modo de Criação: se não tem ID
+    else {
+      const { description, amount, bank, dueDate, startDate, recurrence } = expenseData;
+      const [year, month] = startDate.split('-').map(Number);
+      
+      const transactionsToInsert = [];
+      const numInstallments = recurrence.type === 'infinite' ? 120 : recurrence.installments;
+
+      for (let i = 0; i < numInstallments; i++) {
+        const transactionDate = new Date(year, month - 1 + i, dueDate);
+        
+        const formattedDate = `${transactionDate.getFullYear()}-${String(transactionDate.getMonth() + 1).padStart(2, '0')}-${String(transactionDate.getDate()).padStart(2, '0')}`;
+        
+        transactionsToInsert.push({
+          description,
+          amount,
+          metodo_pagamento: bank,
+          due_date: parseInt(dueDate, 10),
+          date: formattedDate,
+          is_fixed: true,
+          type: 'expense',
+          paid: false,
+        });
+      }
+
+      const { data, error } = await supabase
+        .from('transactions')
+        .insert(transactionsToInsert)
+        .select();
+
+      if (error) {
+        console.error("Erro ao inserir novas despesas fixas:", error);
+        throw error;
+      }
+      return data;
+    }
+  };
+
+  const deleteDespesa = async (despesaObject) => {
     if (!despesaObject || !despesaObject.id) {
         console.error("Objeto da despesa é inválido ou não tem ID.", despesaObject);
         alert("Erro: Não foi possível deletar o item porque ele é inválido.");
         return;
     }
-    // --- FIM DO DIAGNÓSTICO ---
 
-    // Verifica se é uma despesa fixa (da tabela 'transactions')
     if (despesaObject.is_fixed) {
-        console.log("É uma despesa fixa. Deletando da tabela 'transactions' com ID:", despesaObject.id);
-        
-        // A resposta do Supabase é guardada na variável 'response'
-        const response = await supabase.from('transactions').delete().eq('id', despesaObject.id);
-        
-        // --- INÍCIO DO DIAGNÓSTICO ---
-        console.log("Resposta do Supabase:", response);
-        // --- FIM DO DIAGNÓSTICO ---
-        
-        if (response.error) {
-            console.error("Erro do Supabase ao deletar despesa fixa:", response.error);
-            alert(`Erro do Supabase: ${response.error.message}`);
-        } else {
-            console.log("Despesa fixa deletada com sucesso do Supabase.");
+        const { error } = await supabase.from('transactions').delete().eq('id', despesaObject.id);
+        if (error) {
+            console.error("Erro do Supabase ao deletar despesa fixa:", error);
+            alert(`Erro do Supabase: ${error.message}`);
         }
     } else {
-      // É uma despesa variável (da tabela 'despesas' e 'parcelas')
       const despesaId = despesaObject.despesa_id;
       if (!despesaId) {
         console.error("Objeto da despesa não contém 'despesa_id'", despesaObject);
         alert("Erro: Não foi possível identificar a despesa principal para excluir.");
         return;
       }
-      
-      console.log(`Deletando despesa variável e suas parcelas (ID principal: ${despesaId})`);
       
       const { error: parcelasError } = await supabase.from('parcelas').delete().eq('despesa_id', despesaId);
       if (parcelasError) {
@@ -143,7 +186,7 @@ export function FinanceProvider({ children }) {
     bancos,
     getSaldoPorBanco,
     deleteDespesa,
-    saveFixedExpense,
+    saveFixedExpense, // Agora esta linha tem uma função correspondente para exportar
   };
 
   return (
