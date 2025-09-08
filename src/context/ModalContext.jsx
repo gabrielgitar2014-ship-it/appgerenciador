@@ -8,7 +8,6 @@ import NewIncomeModal from '../components/modals/NewIncomeModal';
 import IncomeListModal from '../components/modals/IncomeListModal';
 import NewFixedExpenseModal from '../components/modals/NewFixedExpenseModal';
 import DespesasDetalhesModal from '../components/modals/DespesasDetalhesModal';
-// ✅ 1. Importe o TransactionDetailModal
 import TransactionDetailModal from '../components/modals/TransactionDetailModal';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -22,7 +21,6 @@ const modalMap = {
   listaRendas: IncomeListModal,
   newFixedExpense: NewFixedExpenseModal,
   despesaDetalhes: DespesasDetalhesModal,
-  // ✅ 2. Adicione a referência para o novo modal aqui
   transactionDetail: TransactionDetailModal,
 };
 
@@ -35,12 +33,33 @@ export function ModalProvider({ children }) {
   const hideModal = () => setModal({ type: null, props: {} });
 
   const renderModal = () => {
-    const ModalComponent = modalMap[modal.type];
-    
+    // --- LÓGICA DO MODAL DE CONFIRMAÇÃO ---
+    // Este bloco agora renderiza o AlertDialog quando o tipo é 'confirmation'
     if (modal.type === 'confirmation') {
-        // ... (lógica do confirmation modal)
+      const { title, description, confirmText, onConfirm } = modal.props;
+      return (
+        <AlertDialog open={true} onOpenChange={hideModal}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{title || 'Você tem certeza?'}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {description || 'Esta ação não pode ser desfeita.'}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={hideModal}>Cancelar</AlertDialogCancel>
+              {/* ESTA É A LINHA MAIS IMPORTANTE: onClick executa a função onConfirm */}
+              <AlertDialogAction onClick={onConfirm}>
+                {confirmText || 'Confirmar'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      );
     }
 
+    // --- LÓGICA PARA OUTROS MODAIS ---
+    const ModalComponent = modalMap[modal.type];
     if (!ModalComponent) return null;
     
     return <ModalComponent isOpen={true} onClose={hideModal} {...modal.props} />;
