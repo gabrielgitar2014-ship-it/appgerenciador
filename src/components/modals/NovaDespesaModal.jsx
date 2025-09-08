@@ -3,16 +3,26 @@ import { supabase } from '../../supabaseClient';
 import CalculadoraModal from './CalculadoraModal';
 import { METODOS_DE_PAGAMENTO } from '../../constants/paymentMethods';
 
-const getCurrentMonthISO = (date = new Date()) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
+// Função corrigida para pegar a data local em formato ISO sem erros de fuso horário
+const getTodayLocalISO = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+// Função para pegar o mês atual em formato ISO
+const getCurrentMonthISO = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
     return `${year}-${month}`;
 };
 
 const getInitialState = (despesaParaEditar = null) => {
   if (despesaParaEditar) {
     const mesInicio = despesaParaEditar.mes_inicio_cobranca || getCurrentMonthISO(new Date(despesaParaEditar.data_compra + 'T00:00:00'));
-    
     return {
       amount: despesaParaEditar.amount || '',
       description: despesaParaEditar.description || '',
@@ -28,14 +38,14 @@ const getInitialState = (despesaParaEditar = null) => {
     amount: '',
     description: '',
     metodo_pagamento: METODOS_DE_PAGAMENTO[0],
-    data_compra: new Date().toISOString().split('T')[0],
+    data_compra: getTodayLocalISO(),
     isParcelado: false,
     qtd_parcelas: '',
     mes_inicio_cobranca: getCurrentMonthISO(),
   };
 };
 
-export default function NovaDespesaModal({ onClose, onSave, despesaParaEditar, cardConfigs = [] }) {
+export default function NovaDespesaModal({ onClose, onSave, despesaParaEditar }) {
   const [formData, setFormData] = useState(() => getInitialState(despesaParaEditar));
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -54,13 +64,9 @@ export default function NovaDespesaModal({ onClose, onSave, despesaParaEditar, c
     setFormData(prev => ({ ...prev, amount: calculatedValue }));
   };
 
-  // ✅ FUNÇÃO MODIFICADA COM LOGS
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
-
-    console.log("--- INICIANDO PROCESSO DE SALVAR DESPESA ---");
-    console.log("1. Dados do formulário (formData):", formData);
 
     const dadosParaSalvar = {
         amount: parseFloat(formData.amount),
@@ -71,41 +77,30 @@ export default function NovaDespesaModal({ onClose, onSave, despesaParaEditar, c
         mes_inicio_cobranca: formData.mes_inicio_cobranca,
     };
 
-    console.log("2. Objeto preparado para o banco de dados (dadosParaSalvar):", dadosParaSalvar);
-
     try {
       if (isEditMode) {
-        console.log("Modo de Edição: lógica de edição não implementada com logs ainda.");
-        // Lógica de edição...
+        // ... (sua lógica de edição aqui)
       }
 
-      console.log("3. Enviando dados para a tabela 'despesas' no Supabase...");
       const { data: despesaCriada, error } = await supabase.from('despesas').insert([dadosParaSalvar]).select().single();
-      
-      console.log("4. Resposta do Supabase (despesas):", { despesaCriada, error });
-      
-      if (error) {
-        // Se houver um erro, ele será lançado e o 'catch' vai pegar
-        throw error;
-      }
+      if (error) throw error;
 
       const parcelasArray = [];
       const totalAmount = parseFloat(formData.amount);
       const totalParcelas = dadosParaSalvar.qtd_parcelas;
       
-      const [ano, mes] = formData.mes_inicio_cobranca.split('-');
-      const diaDaCompraOriginal = new Date(formData.data_compra + 'T00:00:00').getDate();
+      const [anoCobranca, mesCobranca] = formData.mes_inicio_cobranca.split('-');
+      const diaDaCompra = new Date(formData.data_compra + 'T00:00:00').getDate();
       
-      const ultimoDiaDoMesDestino = new Date(ano, parseInt(mes), 0).getDate();
-      const diaParaUsar = Math.min(diaDaCompraOriginal, ultimoDiaDoMesDestino);
-      let dataBaseParaParcela = new Date(ano, parseInt(mes) - 1, diaParaUsar);
+      const ultimoDiaDoMesDestino = new Date(anoCobranca, parseInt(mesCobranca), 0).getDate();
+      const diaParaUsar = Math.min(diaDaCompra, ultimoDiaDoMesDestino);
       
-      const mesDeDestino = `${dataBaseParaParcela.getFullYear()}-${String(dataBaseParaParcela.getMonth() + 1).padStart(2, '0')}`;
+      let dataBaseParaParcela = new Date(Date.UTC(anoCobranca, parseInt(mesCobranca) - 1, diaParaUsar));
 
       let somaDasParcelasAcumulada = 0;
       for (let i = 0; i < totalParcelas; i++) {
-        const dataParcela = new Date(dataBaseParaParcela);
-        dataParcela.setMonth(dataBaseParaParcela.getMonth() + i);
+        const dataParcelaAtual = new Date(dataBaseParaParcela);
+        dataParcelaAtual.setUTCMonth(dataBaseParaParcela.getUTCMonth() + i);
         
         let valorParcelaAtual;
         if (i === totalParcelas - 1) {
@@ -119,30 +114,20 @@ export default function NovaDespesaModal({ onClose, onSave, despesaParaEditar, c
           despesa_id: despesaCriada.id,
           numero_parcela: i + 1,
           amount: parseFloat(valorParcelaAtual),
-          data_parcela: dataParcela.toISOString().split('T')[0],
+          data_parcela: dataParcelaAtual.toISOString().split('T')[0],
           paga: false,
         });
       }
       
-      console.log("5. Array de parcelas gerado:", parcelasArray);
-      console.log("6. Enviando dados para a tabela 'parcelas' no Supabase...");
-
       const { error: errorParcelas } = await supabase.from('parcelas').insert(parcelasArray);
-
-      console.log("7. Resposta do Supabase (parcelas):", { errorParcelas });
-
-      if (errorParcelas) {
-        throw errorParcelas;
-      }
+      if (errorParcelas) throw errorParcelas;
       
-      console.log("8. Sucesso! Chamando onSave() para atualizar a UI.");
-      onSave(despesaCriada, mesDeDestino);
+      onSave(despesaCriada, formData.mes_inicio_cobranca);
 
     } catch (err) {
-      console.error('--- ERRO DETALHADO NO CATCH ---', err);
-      alert('Não foi possível salvar a despesa. Verifique o console para mais detalhes.');
+      console.error('Erro detalhado ao salvar despesa:', err);
+      alert('Não foi possível salvar a despesa.');
     } finally {
-        console.log("--- FINALIZANDO PROCESSO ---");
         setIsSaving(false);
     }
   };
@@ -151,15 +136,13 @@ export default function NovaDespesaModal({ onClose, onSave, despesaParaEditar, c
   const submitButtonText = isSaving ? 'A salvar...' : (isEditMode ? 'Salvar Alterações' : 'Salvar Despesa');
 
   return (
-    // O resto do seu componente JSX continua o mesmo...
     <>
       <CalculadoraModal isOpen={isCalculatorOpen} onClose={() => setIsCalculatorOpen(false)} onConfirm={handleCalculatorConfirm} />
       <div className="fixed inset-0 bg-transparent flex justify-center items-center z-50 p-4">
-        <div className="bg-white rounded-lg shadow-2xl w-11/12 md:w-1/2 lg:w-1/3 flex flex-col max-h-[90vh] animate-fade-in-down">
+        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-2xl w-11/12 md:w-1/2 lg:w-1/3 flex flex-col max-h-[90vh] animate-fade-in-down">
           <h2 className="text-2xl font-bold text-gray-800 p-6 pb-4">{modalTitle}</h2>
           <div className="flex-1 overflow-y-auto px-6">
             <div className="space-y-4">
-              {/* Campos do formulário */}
               <div>
                 <label htmlFor="amount" className="block text-sm font-medium text-gray-700">Valor (R$)</label>
                 <div className="mt-1 flex items-center gap-2">
