@@ -7,6 +7,7 @@ import GeneralTab from "../components/tabs/Generaltab.jsx";
 import FixasTab from "../components/tabs/FixasTab.jsx";
 import BancosTab from "../components/tabs/BancosTab.jsx";
 import CardDetailPage from "./CardDetailPage";
+import AllExpensesPage from "./AllExpensesPage"; // ✅ 1. IMPORTE A NOVA PÁGINA
 
 const getCurrentMonth = () => {
   const now = new Date();
@@ -14,7 +15,7 @@ const getCurrentMonth = () => {
 };
 
 export default function Dashboard({ onLogout, userRole }) {
-  const { allParcelas, loading, error, setError, fetchData, clearAllData } = useFinance();
+  const { allParcelas, loading, error, fetchData, clearAllData } = useFinance();
   
   const [view, setView] = useState({ name: 'tabs', data: null });
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
@@ -31,34 +32,33 @@ export default function Dashboard({ onLogout, userRole }) {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
 
-  // ✅ EFEITO ADICIONADO PARA FECHAR A PÁGINA DE DETALHES
-  // Este hook observa a variável 'activeTab'. Sempre que ela muda, ele é executado.
   useEffect(() => {
-    // Se a visualização atual for a página de detalhes,
-    // força a volta para a visualização de abas.
-    if (view.name === 'cardDetail') {
+    if (view.name !== 'tabs') {
       setView({ name: 'tabs', data: null });
     }
-  }, [activeTab]); // A "dependência" que dispara o efeito.
+  }, [activeTab]);
 
-  const handleNavigateToCard = (banco) => {
-    setView({ name: 'cardDetail', data: banco });
-  };
-  const handleBackToTabs = () => {
-    setView({ name: 'tabs', data: null });
-  };
+  const handleNavigateToCard = (banco) => setView({ name: 'cardDetail', data: banco });
+  const handleBackToTabs = () => setView({ name: 'tabs', data: null });
+  // ✅ 2. CRIE A FUNÇÃO PARA NAVEGAR PARA A TELA DE TODAS AS DESPESAS
+  const handleNavigateToAllExpenses = () => setView({ name: 'allExpenses', data: null });
 
   const parcelasDoMesSelecionado = useMemo(() => {
     return (allParcelas || []).filter(p => p.data_parcela?.startsWith(selectedMonth));
   }, [selectedMonth, allParcelas]);
   
   const tabComponents = {
-    geral: <GeneralTab selectedMonth={selectedMonth} parcelasDoMes={parcelasDoMesSelecionado} />,
+    // ✅ 3. PASSE A NOVA FUNÇÃO COMO PROP PARA A GENERALTAB
+    geral: <GeneralTab selectedMonth={selectedMonth} parcelasDoMes={parcelasDoMesSelecionado} onHealthCardClick={handleNavigateToAllExpenses} />,
     fixas: <FixasTab selectedMonth={selectedMonth} />,
     bancos: <BancosTab onCardClick={handleNavigateToCard} selectedMonth={selectedMonth} />,
   };
 
   const renderCurrentView = () => {
+    // ✅ 4. ADICIONE A LÓGICA PARA RENDERIZAR A NOVA PÁGINA
+    if (view.name === 'allExpenses') {
+      return <AllExpensesPage onBack={handleBackToTabs} selectedMonth={selectedMonth} />;
+    }
     if (view.name === 'cardDetail') {
       return <CardDetailPage banco={view.data} onBack={handleBackToTabs} selectedMonth={selectedMonth} />;
     }
