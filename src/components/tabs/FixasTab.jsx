@@ -1,17 +1,22 @@
-// src/components/tabs/FixasTab.jsx
-
 import { useState, useMemo } from "react";
 import { useFinance } from "../../context/FinanceContext";
 import { useModal } from "../../context/ModalContext";
 
 export default function FixasTab({ selectedMonth }) {
-  // Certifique-se de que 'deleteDespesa' está sendo importado do contexto
+  // ✅ GARANTA QUE 'saveFixedExpense' ESTÁ SENDO EXTRAÍDO AQUI
   const { transactions, fetchData, saveFixedExpense, deleteDespesa } = useFinance();
   const { showModal, hideModal } = useModal();
 
   const [transactionToEdit, setTransactionToEdit] = useState(null);
 
   const handleSave = async (expenseData) => {
+    // Verificação para garantir que a função do contexto existe antes de chamar
+    if (!saveFixedExpense) {
+      console.error("Função saveFixedExpense não foi encontrada no contexto! Verifique a exportação no FinanceContext.jsx");
+      alert("Erro crítico: A função para salvar não está disponível.");
+      return;
+    }
+
     try {
       await saveFixedExpense(expenseData);
       fetchData();
@@ -32,11 +37,8 @@ export default function FixasTab({ selectedMonth }) {
     setTransactionToEdit(null);
     showModal('newFixedExpense', { onSave: handleSave });
   };
-
-  // ✅ --- ESTA É A FUNÇÃO CORRETA ---
-  // Ela recebe o objeto 'expense' completo e abre um modal de confirmação.
+  
   const handleDelete = (expense) => {
-    // Verificação para garantir que a função do contexto existe
     if (!deleteDespesa) {
         console.error("Função deleteDespesa não foi encontrada no contexto!");
         alert("Erro crítico: A função para deletar não está disponível.");
@@ -49,11 +51,9 @@ export default function FixasTab({ selectedMonth }) {
       confirmText: 'Sim, Excluir',
       onConfirm: async () => {
         try {
-          // A lógica de exclusão real acontece aqui, dentro do onConfirm.
           await deleteDespesa(expense);
-          console.log("Despesa deletada com sucesso!");
-          fetchData(); // Atualiza a lista após a exclusão
-          hideModal(); // Fecha o modal de confirmação
+          fetchData(); 
+          hideModal();
         } catch(error) {
             console.error("Erro ao deletar despesa:", error);
             alert(`Erro ao tentar excluir: ${error.message}`);
@@ -66,21 +66,19 @@ export default function FixasTab({ selectedMonth }) {
     showModal('transactionDetail', {
       transaction: expense,
       onEdit: () => handleOpenEditModal(expense),
-      // Aqui, garantimos que a função handleDelete correta (a de cima) seja chamada
       onDelete: () => handleDelete(expense)
     });
   };
 
   const handleTogglePaidStatus = async (expense) => {
-    console.log("Alterando status de pagamento para:", !expense.paid);
-    // Lembre-se de implementar a lógica de update no Supabase aqui
+    // Lógica para alterar o status de pagamento
     fetchData();
   };
 
   const monthlyFixedExpenses = useMemo(() => {
     return transactions.filter((t) => t.date?.startsWith(selectedMonth) && t.type === "expense" && t.is_fixed);
   }, [transactions, selectedMonth]);
-
+  
   const totalIncome = useMemo(() => {
     return transactions
       .filter(t => t.date && t.date.startsWith(selectedMonth) && t.type === "income")
@@ -100,23 +98,23 @@ export default function FixasTab({ selectedMonth }) {
           <span className="material-symbols-outlined">add</span>Nova Despesa Fixa
         </button>
       </div>
-
+      
       <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-lg shadow-black/5 border border-slate-200 dark:border-slate-700 space-y-3">
-        <div className="flex justify-between items-center text-lg">
-          <span className="text-slate-600 dark:text-slate-300">Total de Despesas Fixas:</span>
-          <span className="font-bold text-red-600 dark:text-red-400">{formatCurrency(totalFixedExpenses)}</span>
-        </div>
-        {totalIncome > 0 && (
-          <div>
-            <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400 mb-1">
-              <span>Consumo da Renda</span>
-              <span>{percentage.toFixed(2)}%</span>
-            </div>
-            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-4">
-              <div className="bg-gradient-to-r from-red-500 to-rose-500 h-4 rounded-full transition-all duration-500" style={{ width: `${barWidth}%` }}></div>
-            </div>
+          <div className="flex justify-between items-center text-lg">
+              <span className="text-slate-600 dark:text-slate-300">Total de Despesas Fixas:</span>
+              <span className="font-bold text-red-600 dark:text-red-400">{formatCurrency(totalFixedExpenses)}</span>
           </div>
-        )}
+          {totalIncome > 0 && (
+               <div>
+                  <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400 mb-1">
+                      <span>Consumo da Renda</span>
+                      <span>{percentage.toFixed(2)}%</span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-4">
+                      <div className="bg-gradient-to-r from-red-500 to-rose-500 h-4 rounded-full transition-all duration-500" style={{ width: `${barWidth}%` }}></div>
+                  </div>
+              </div>
+          )}
       </div>
 
       <div className="space-y-3">
@@ -130,7 +128,7 @@ export default function FixasTab({ selectedMonth }) {
                 <p className="font-semibold text-red-600 dark:text-red-400 block">{formatCurrency(expense.amount)}</p>
               </div>
               <button onClick={() => handleTogglePaidStatus(expense)} className={`ml-4 py-1 px-4 text-sm font-semibold text-white rounded-full transition-colors ${expense.paid ? "bg-gradient-to-br from-green-500 to-emerald-500" : "bg-slate-400 dark:bg-slate-600 hover:bg-slate-500"}`}>
-                {expense.paid ? "Pago" : "Pagar"}
+                  {expense.paid ? "Pago" : "Pagar"}
               </button>
             </div>
           ))
