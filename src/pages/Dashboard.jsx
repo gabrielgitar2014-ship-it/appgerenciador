@@ -1,37 +1,22 @@
-// src/pages/Dashboard.jsx
-
 import { useState, useEffect, useMemo } from "react";
 import { useFinance } from "../context/FinanceContext"; 
-
-// Componentes
 import Header from "../components/Header";
 import Sidebar from "../components/Sidebar"; 
 import WelcomeScreen from "../components/WelcomeScreen"; 
-
-// Abas e a nova Página de Detalhes
 import GeneralTab from "../components/tabs/Generaltab.jsx";
 import FixasTab from "../components/tabs/FixasTab.jsx";
 import BancosTab from "../components/tabs/BancosTab.jsx";
-import CardDetailPage from "./CardDetailPage"; // Importa a nova página
+import CardDetailPage from "./CardDetailPage";
 
 const getCurrentMonth = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 };
 
-const ErrorNotification = ({ message, onClose }) => (
-  <div className="container mx-auto mt-4 p-4 bg-red-500 text-white rounded-xl shadow-lg flex justify-between items-center">
-    <span>{message}</span>
-    <button onClick={onClose} className="font-bold text-xl">×</button>
-  </div>
-);
-
 export default function Dashboard({ onLogout, userRole }) {
   const { allParcelas, loading, error, setError, fetchData, clearAllData } = useFinance();
   
-  // Estado para controlar a visualização: 'tabs' (padrão) ou 'cardDetail'
   const [view, setView] = useState({ name: 'tabs', data: null });
-  
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'geral');
   const [showWelcome, setShowWelcome] = useState(true);
@@ -46,7 +31,16 @@ export default function Dashboard({ onLogout, userRole }) {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
 
-  // Funções para navegar entre as visualizações
+  // ✅ EFEITO ADICIONADO PARA FECHAR A PÁGINA DE DETALHES
+  // Este hook observa a variável 'activeTab'. Sempre que ela muda, ele é executado.
+  useEffect(() => {
+    // Se a visualização atual for a página de detalhes,
+    // força a volta para a visualização de abas.
+    if (view.name === 'cardDetail') {
+      setView({ name: 'tabs', data: null });
+    }
+  }, [activeTab]); // A "dependência" que dispara o efeito.
+
   const handleNavigateToCard = (banco) => {
     setView({ name: 'cardDetail', data: banco });
   };
@@ -61,16 +55,13 @@ export default function Dashboard({ onLogout, userRole }) {
   const tabComponents = {
     geral: <GeneralTab selectedMonth={selectedMonth} parcelasDoMes={parcelasDoMesSelecionado} />,
     fixas: <FixasTab selectedMonth={selectedMonth} />,
-    // A BancosTab agora recebe a função de navegação como propriedade
-    bancos: <BancosTab onCardClick={handleNavigateToCard} />,
+    bancos: <BancosTab onCardClick={handleNavigateToCard} selectedMonth={selectedMonth} />,
   };
 
-  // Função para decidir qual componente renderizar
   const renderCurrentView = () => {
     if (view.name === 'cardDetail') {
-      return <CardDetailPage banco={view.data} onBack={handleBackToTabs} />;
+      return <CardDetailPage banco={view.data} onBack={handleBackToTabs} selectedMonth={selectedMonth} />;
     }
-    // O padrão é renderizar a aba ativa
     return tabComponents[activeTab];
   };
 
@@ -107,7 +98,7 @@ export default function Dashboard({ onLogout, userRole }) {
         />
         
         <main className="container mx-auto p-4 pb-28 flex-1">
-          {error && <ErrorNotification message={error} onClose={() => setError(null)} />}
+          {error && <div className="p-4 bg-red-500 text-white rounded-xl">{error}</div>}
           
           {loading ? (
             <div className="text-center mt-8"><p className="font-semibold text-lg dark:text-gray-200">Carregando dados...</p></div>
