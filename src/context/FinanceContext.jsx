@@ -55,17 +55,35 @@ export function FinanceProvider({ children }) {
   }, [fetchData]);
 
   const deleteDespesa = async (despesaObject) => {
+    // --- INÍCIO DO DIAGNÓSTICO ---
+    console.log("Tentando deletar o seguinte objeto:", despesaObject);
+
+    if (!despesaObject || !despesaObject.id) {
+        console.error("Objeto da despesa é inválido ou não tem ID.", despesaObject);
+        alert("Erro: Não foi possível deletar o item porque ele é inválido.");
+        return;
+    }
+    // --- FIM DO DIAGNÓSTICO ---
+
     // Verifica se é uma despesa fixa (da tabela 'transactions')
     if (despesaObject.is_fixed) {
-      console.log("Deletando despesa fixa com ID:", despesaObject.id);
-      const { error } = await supabase.from('transactions').delete().eq('id', despesaObject.id);
-      if (error) {
-        console.error("Erro ao deletar despesa fixa:", error);
-        alert(`Erro: ${error.message}`);
-      }
+        console.log("É uma despesa fixa. Deletando da tabela 'transactions' com ID:", despesaObject.id);
+        
+        // A resposta do Supabase é guardada na variável 'response'
+        const response = await supabase.from('transactions').delete().eq('id', despesaObject.id);
+        
+        // --- INÍCIO DO DIAGNÓSTICO ---
+        console.log("Resposta do Supabase:", response);
+        // --- FIM DO DIAGNÓSTICO ---
+        
+        if (response.error) {
+            console.error("Erro do Supabase ao deletar despesa fixa:", response.error);
+            alert(`Erro do Supabase: ${response.error.message}`);
+        } else {
+            console.log("Despesa fixa deletada com sucesso do Supabase.");
+        }
     } else {
       // É uma despesa variável (da tabela 'despesas' e 'parcelas')
-      // O ID principal da compra está em 'despesa_id'
       const despesaId = despesaObject.despesa_id;
       if (!despesaId) {
         console.error("Objeto da despesa não contém 'despesa_id'", despesaObject);
@@ -75,7 +93,6 @@ export function FinanceProvider({ children }) {
       
       console.log(`Deletando despesa variável e suas parcelas (ID principal: ${despesaId})`);
       
-      // 1. Deleta todas as parcelas associadas
       const { error: parcelasError } = await supabase.from('parcelas').delete().eq('despesa_id', despesaId);
       if (parcelasError) {
         console.error("Erro ao deletar parcelas:", parcelasError);
@@ -83,7 +100,6 @@ export function FinanceProvider({ children }) {
         return;
       }
 
-      // 2. Deleta a despesa principal
       const { error: despesaError } = await supabase.from('despesas').delete().eq('id', despesaId);
       if (despesaError) {
         console.error("Erro ao deletar despesa principal:", despesaError);
@@ -118,16 +134,16 @@ export function FinanceProvider({ children }) {
   };
   
   const value = {
-  loading,
-  error,
-  setError,
-  fetchData,
-  transactions,
-  allParcelas,
-  bancos,
-  getSaldoPorBanco,
-  deleteDespesa,
-  saveFixedExpense, // ✅ GARANTA QUE ESTA LINHA EXISTE!
+    loading,
+    error,
+    setError,
+    fetchData,
+    transactions,
+    allParcelas,
+    bancos,
+    getSaldoPorBanco,
+    deleteDespesa,
+    saveFixedExpense,
   };
 
   return (
@@ -144,4 +160,3 @@ export const useFinance = () => {
     }
     return context;
 };
-
