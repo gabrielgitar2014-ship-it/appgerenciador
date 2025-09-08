@@ -118,15 +118,16 @@ export function FinanceProvider({ children }) {
   };
   
   const value = {
-    loading,
-    error,
-    setError,
-    fetchData,
-    transactions,
-    allParcelas,
-    bancos,
-    getSaldoPorBanco,
-    deleteDespesa, // Exportando a nova função
+  loading,
+  error,
+  setError,
+  fetchData,
+  transactions,
+  allParcelas,
+  bancos,
+  getSaldoPorBanco,
+  deleteDespesa,
+  saveFixedExpense, // ✅ GARANTA QUE ESTA LINHA EXISTE!
   };
 
   return (
@@ -143,3 +144,4 @@ export const useFinance = () => {
     }
     return context;
 };
+
