@@ -1,27 +1,41 @@
-// src/components/ListaTransacoes.jsx
-
 import React, { useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext'; 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { MoreHorizontal, Edit, Trash2 } from 'lucide-react';
-import { useModal } from '../context/ModalContext'; // Importar o useModal
+import { useModal } from '../context/ModalContext';
 
-export const ListaTransacoes = ({ nomeDoBanco, onEdit, onDelete }) => {
-  const { getDespesasPorBanco, transactions } = useFinance();
-  const { showModal } = useModal(); // Obter a função showModal
+// ✅ RECEBE 'selectedMonth' COMO PROP
+export const ListaTransacoes = ({ bancoNome, selectedMonth, onEdit, onDelete }) => {
+  const { transactions, allParcelas } = useFinance();
+  const { showModal } = useModal();
 
-  const despesas = useMemo(() => {
-    if (!nomeDoBanco) return [];
+  const despesasDoMes = useMemo(() => {
+    if (!bancoNome || !selectedMonth) return [];
 
-    // ✅ CORREÇÃO APLICADA AQUI: Adicionado '|| []'
-    // Isso garante que 'despesasDoBanco' seja sempre uma lista, mesmo que a função falhe.
-    const despesasDoBanco = getDespesasPorBanco(nomeDoBanco) || [];
+    // Filtra despesas fixas
+    const despesasFixas = transactions.filter(t => 
+      t.metodo_pagamento?.toLowerCase() === bancoNome.toLowerCase() &&
+      t.is_fixed &&
+      t.date?.startsWith(selectedMonth)
+    );
+
+    // Filtra despesas variáveis (baseado nas parcelas)
+    const despesasPrincipaisDoBanco = transactions.filter(t => t.metodo_pagamento?.toLowerCase() === bancoNome.toLowerCase() && !t.is_fixed);
+    const idsDespesasVariaveis = despesasPrincipaisDoBanco.map(d => d.id);
     
-    // Ordena as despesas pela data mais recente
-    return despesasDoBanco.sort((a, b) => new Date(b.data || b.data_compra) - new Date(a.data || a.data_compra));
-  }, [nomeDoBanco, transactions]);
+    const parcelasVariaveis = allParcelas
+        .filter(p => idsDespesasVariaveis.includes(p.despesa_id) && p.data_parcela?.startsWith(selectedMonth))
+        .map(p => {
+            const despesaPrincipal = despesasPrincipaisDoBanco.find(d => d.id === p.despesa_id);
+            return { ...despesaPrincipal, ...p, id: p.id }; // Sobrescreve o ID para ser o da parcela
+        });
+
+    const todasAsDespesas = [...despesasFixas, ...parcelasVariaveis];
+    return todasAsDespesas.sort((a, b) => new Date(b.data || b.data_parcela) - new Date(a.data || a.data_parcela));
+
+  }, [bancoNome, selectedMonth, transactions, allParcelas]);
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
@@ -32,11 +46,10 @@ export const ListaTransacoes = ({ nomeDoBanco, onEdit, onDelete }) => {
     showModal('despesaDetalhes', { despesa });
   };
 
-  // Esta linha agora é segura porque 'despesas' será sempre uma lista.
-  if (despesas.length === 0) {
+  if (despesasDoMes.length === 0) {
     return (
       <div className="text-center text-muted-foreground py-12">
-        <p>Nenhuma despesa registrada para este cartão ainda.</p>
+        <p>Nenhuma despesa registrada para este cartão neste mês.</p>
       </div>
     );
   }
@@ -52,14 +65,14 @@ export const ListaTransacoes = ({ nomeDoBanco, onEdit, onDelete }) => {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {despesas.map((despesa) => (
+        {despesasDoMes.map((despesa) => (
           <TableRow 
             key={despesa.id} 
             onClick={() => handleShowDetails(despesa)}
             className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             <TableCell className="font-medium">{despesa.description || despesa.descricao}</TableCell>
-            <TableCell>{formatDate(despesa.data || despesa.data_compra)}</TableCell>
+            <TableCell>{formatDate(despesa.data_parcela || despesa.date)}</TableCell>
             <TableCell className="text-right font-mono text-red-600">
               - R$ {(despesa.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </TableCell>
