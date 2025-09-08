@@ -5,16 +5,11 @@ import { Button } from '@/components/ui/button';
 import { MoreHorizontal, Edit, Trash2 } from 'lucide-react';
 import { useModal } from '../context/ModalContext';
 
-// ✅ ESTA É A VERSÃO CORRETA E SIMPLIFICADA
-// Note que ela não tem mais o 'useMemo' para calcular as despesas.
-// Ela apenas recebe e exibe a lista da prop 'transactions'.
-
 export const ListaTransacoes = ({ transactions, onEdit, onDelete }) => {
   const { showModal } = useModal();
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
-    // Adicionado T00:00:00 para evitar problemas de fuso horário
     return new Date(dateString + 'T00:00:00').toLocaleDateString('pt-BR');
   };
   
@@ -35,7 +30,6 @@ export const ListaTransacoes = ({ transactions, onEdit, onDelete }) => {
       <TableHeader>
         <TableRow>
           <TableHead>Descrição</TableHead>
-          <TableHead>Data</TableHead>
           <TableHead className="text-right">Valor</TableHead>
           <TableHead className="w-[50px]"></TableHead>
         </TableRow>
@@ -47,12 +41,18 @@ export const ListaTransacoes = ({ transactions, onEdit, onDelete }) => {
             onClick={() => handleShowDetails(despesa)}
             className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800"
           >
-            <TableCell className="font-medium">{despesa.description || despesa.descricao}</TableCell>
-            <TableCell>{formatDate(despesa.data_parcela || despesa.date)}</TableCell>
-            <TableCell className={`text-right font-mono ${despesa.amount < 0 ? 'text-green-500' : 'text-red-600'}`}>
+            <TableCell className="font-medium">
+              <div>{despesa.description || despesa.descricao}</div>
+              <div className="text-xs text-muted-foreground">
+                {formatDate(despesa.data_compra || despesa.date)}
+              </div>
+            </TableCell>
+            
+            <TableCell className={`text-right font-mono text-sm ${despesa.amount < 0 ? 'text-green-500' : 'text-red-600'}`}>
               {despesa.amount < 0 ? '+ ' : '- '}
               R$ {Math.abs(despesa.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </TableCell>
+            
             <TableCell>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
