@@ -10,17 +10,23 @@ export const ListaTransacoes = ({ transactions, onEdit, onDelete }) => {
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
+    // Adicionado 'T00:00:00' para garantir que a data seja interpretada como local e não UTC
     return new Date(dateString + 'T00:00:00').toLocaleDateString('pt-BR');
   };
   
   const handleShowDetails = (despesa) => {
-    showModal('despesaDetalhes', { despesa });
+    // Usando o modal 'transactionDetail' que já tem um layout melhor
+    showModal('transactionDetail', { 
+        transaction: despesa,
+        onEdit: () => onEdit(despesa),
+        onDelete: () => onDelete(despesa),
+    });
   };
 
   if (!transactions || transactions.length === 0) {
     return (
       <div className="text-center text-muted-foreground py-12">
-        <p>Nenhuma despesa encontrada.</p>
+        <p>Nenhuma despesa encontrada para os filtros selecionados.</p>
       </div>
     );
   }
@@ -43,14 +49,21 @@ export const ListaTransacoes = ({ transactions, onEdit, onDelete }) => {
           >
             <TableCell className="font-medium">
               <div>{despesa.description || despesa.descricao}</div>
-              <div className="text-xs text-muted-foreground">
-                {formatDate(despesa.data_compra || despesa.date)}
+              <div className="text-xs text-muted-foreground flex items-center">
+                <span>{formatDate(despesa.data_compra || despesa.date)}</span>
+                
+                {/* ✅ ALTERAÇÃO AQUI: Exibe a informação da parcela se ela existir */}
+                {despesa.parcelaInfo && (
+                  <span className="ml-2 pl-2 border-l border-slate-200 dark:border-slate-700">
+                    {despesa.parcelaInfo}
+                  </span>
+                )}
               </div>
             </TableCell>
             
             <TableCell className={`text-right font-mono text-sm ${despesa.amount < 0 ? 'text-green-500' : 'text-red-600'}`}>
-              {despesa.amount < 0 ? '+ ' : '- '}
-              R$ {Math.abs(despesa.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {/* Lógica de valor ajustada para o contexto de despesa */}
+              - R$ {Math.abs(despesa.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </TableCell>
             
             <TableCell>
