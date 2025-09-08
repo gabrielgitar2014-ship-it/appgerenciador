@@ -12,7 +12,7 @@ const CardDetailPage = ({ banco, onBack, selectedMonth }) => {
   const { getSaldoPorBanco, fetchData, deleteDespesa, transactions, allParcelas } = useFinance();
   const { showModal, hideModal } = useModal();
   const [searchTerm, setSearchTerm] = useState('');
-
+  
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -37,22 +37,16 @@ const CardDetailPage = ({ banco, onBack, selectedMonth }) => {
       ? todasAsDespesas.filter(d => d.description?.toLowerCase().includes(searchTerm.toLowerCase()))
       : todasAsDespesas;
 
-    // Ao mudar os filtros, resetamos para a primeira página para evitar páginas vazias
     setCurrentPage(1); 
-    return filtered.sort((a, b) => new Date(b.data_parcela || b.date) - new Date(a.data_parcela || a.date));
+    return filtered.sort((a, b) => new Date(b.data_compra || b.date) - new Date(a.data_compra || a.date));
   }, [banco, selectedMonth, transactions, allParcelas, searchTerm]);
 
   const totalPages = Math.ceil(despesasDoMes.length / itemsPerPage);
   const currentData = despesasDoMes.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const nextPage = () => {
-    setCurrentPage((current) => Math.min(current + 1, totalPages));
-  };
-
-  const prevPage = () => {
-    setCurrentPage((current) => Math.max(current - 1, 1));
-  };
-
+  const nextPage = () => setCurrentPage((current) => Math.min(current + 1, totalPages));
+  const prevPage = () => setCurrentPage((current) => Math.max(current - 1, 1));
+  
   const handleSaveDespesa = () => { hideModal(); fetchData(); };
   const handleEditDespesa = (despesa) => { showModal('novaDespesa', { despesaParaEditar: despesa, onSave: handleSaveDespesa }); };
   const handleDeleteDespesa = (despesa) => {
@@ -64,18 +58,15 @@ const CardDetailPage = ({ banco, onBack, selectedMonth }) => {
   };
 
   return (
-    // Adiciona classes para ocupar a tela verticalmente e usar flexbox
     <div className="p-4 md:p-6 space-y-4 flex flex-col h-full overflow-hidden"> 
       <Button variant="ghost" onClick={onBack} className="mb-4 gap-2 self-start"> 
         <ArrowLeft className="h-4 w-4" /> Voltar 
       </Button>
-
-      <div className="flex justify-center flex-shrink-0"> {/* flex-shrink-0 para não diminuir o cartão */}
+      <div className="flex justify-center flex-shrink-0">
         <CartaoPersonalizado banco={banco} saldo={getSaldoPorBanco(banco, selectedMonth)} isSelected={true} />
       </div>
-
-      <Card className="flex-grow flex flex-col min-h-0"> {/* flex-grow para o card ocupar o espaço restante */}
-        <CardHeader className="flex-shrink-0"> {/* Mantém o cabeçalho fixo */}
+      <Card className="flex-grow flex flex-col min-h-0">
+        <CardHeader className="flex-shrink-0">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <CardTitle>Transações de {banco.nome}</CardTitle>
             <div className="flex items-center gap-2 w-full md:w-auto">
@@ -86,13 +77,12 @@ const CardDetailPage = ({ banco, onBack, selectedMonth }) => {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex-grow flex flex-col min-h-0 p-0"> {/* flex-grow e p-0 para controlar padding */}
-          {/* O container abaixo gerencia a rolagem da tabela */}
-          <div className="flex-grow overflow-y-auto px-6"> {/* Adicionado px-6 para padding horizontal da tabela */}
+        <CardContent className="flex-grow flex flex-col min-h-0 p-0">
+          <div className="flex-grow overflow-y-auto px-6">
             <ListaTransacoes transactions={currentData} onEdit={handleEditDespesa} onDelete={handleDeleteDespesa} />
           </div>
           {totalPages > 1 && (
-            <div className="flex items-center justify-end space-x-2 pt-4 pb-4 px-6 flex-shrink-0"> {/* Mantém a paginação fixa */}
+            <div className="flex items-center justify-end space-x-2 pt-4 pb-4 px-6 flex-shrink-0">
               <span className="text-sm text-muted-foreground"> Página {currentPage} de {totalPages} </span>
               <Button variant="outline" size="sm" onClick={prevPage} disabled={currentPage === 1}>
                 <ChevronLeft className="h-4 w-4" /> Anterior
