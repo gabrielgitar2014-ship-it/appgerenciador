@@ -1,13 +1,12 @@
-// src/components/tabs/Generaltab.jsx
-
 import React, { useMemo } from 'react';
 import { useFinance } from '../../context/FinanceContext';
 import { useModal } from '../../context/ModalContext';
 import SummaryCard from '../SummaryCard'; 
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowUp, ArrowDown, Wallet, Plus } from 'lucide-react'; 
+import { ArrowUp, ArrowDown, Wallet } from 'lucide-react'; 
 
 const getFinancialHealth = (income, expense) => {
+  // ... (a função getFinancialHealth continua igual)
   if (income === 0 && expense > 0) return { status: "Crítico", style: "bg-gradient-to-br from-slate-800 to-black", message: "Você tem despesas mas nenhuma renda registrada para este mês." };
   if (income === 0) return { status: "Indefinido", style: "bg-slate-500", message: "Nenhuma renda registrada para este mês." };
   const percentage = (expense / income) * 100;
@@ -17,7 +16,8 @@ const getFinancialHealth = (income, expense) => {
   return { status: "Crítico", style: "bg-gradient-to-br from-slate-800 to-black", message: "Alerta! Seus gastos superaram sua renda." };
 };
 
-export default function GeneralTab({ selectedMonth, parcelasDoMes }) {
+// ✅ 1. RECEBA 'onHealthCardClick' COMO PROP
+export default function GeneralTab({ selectedMonth, parcelasDoMes, onHealthCardClick }) {
   const { transactions, loading, fetchData } = useFinance();
   const { showModal, hideModal } = useModal();
 
@@ -74,11 +74,7 @@ export default function GeneralTab({ selectedMonth, parcelasDoMes }) {
           icon={ArrowDown}
           colorClass="text-red-500"
           loading={loading}
-          // ✅ 1. REMOVEMOS actionIcon
-          // actionIcon={Plus} 
-          // ✅ 2. O evento onClick AGORA ABRE O MODAL DIRETAMENTE
           onClick={() => showModal('novaDespesa', { onSave: handleSaveDespesa })}
-          // ✅ 3. Adicionamos a prop isClickable para o card ter a animação
           isClickable={true} 
         />
         <SummaryCard
@@ -87,17 +83,17 @@ export default function GeneralTab({ selectedMonth, parcelasDoMes }) {
           icon={Wallet}
           colorClass={financialSummary.balance >= 0 ? 'text-blue-500' : 'text-orange-500'}
           loading={loading}
-          // ✅ Adicionamos a prop isClickable para o card ter a animação
-          isClickable={true}
-          // Se você quiser que o saldo também abra um modal (ex: de histórico de saldo), adicione um onClick aqui.
-          // onClick={() => showModal('historicoSaldo')} 
         />
       </div>
       
       {loading ? (
         <Skeleton className="h-20 rounded-2xl" />
       ) : (
-        <div className={`p-5 rounded-2xl shadow-lg text-white ${health.style}`}>
+        // ✅ 2. FAÇA O CARD SER CLICÁVEL
+        <div 
+          onClick={onHealthCardClick} // Chama a função recebida por prop
+          className={`p-5 rounded-2xl shadow-lg text-white ${health.style} cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.99]`}
+        >
           <h3 className="font-bold text-lg">{health.status}</h3>
           <p className="text-sm opacity-90">{health.message}</p>
         </div>
