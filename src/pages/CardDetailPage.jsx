@@ -1,82 +1,103 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useFinance } from '../context/FinanceContext';
 import CartaoPersonalizado from '../components/CartaoPersonalizado';
 import { ListaTransacoes } from '../components/ListaTransacoes';
 import { useModal } from '../context/ModalContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import SearchBar from '../components/SearchBar'; // Corrigido na etapa anterior
+
+// ✅ 1. A importação do 'usePagination' foi REMOVIDA.
 
 const CardDetailPage = ({ banco, onBack, selectedMonth }) => {
-  const { getSaldoPorBanco, fetchData, deleteDespesa } = useFinance();
+  const { getSaldoPorBanco, fetchData, deleteDespesa, transactions, allParcelas } = useFinance();
   const { showModal, hideModal } = useModal();
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const handleSaveDespesa = () => {
-    hideModal();
-    fetchData();
+  // ✅ 2. ESTADO DA PÁGINA AGORA VIVE DIRETAMENTE AQUI.
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10; // Itens por página
+
+  const despesasDoMes = useMemo(() => {
+    if (!banco || !selectedMonth) return [];
+    const bancoNomeLowerCase = banco.nome.toLowerCase();
+
+    const despesasFixas = transactions.filter(t => t.metodo_pagamento?.toLowerCase() === bancoNomeLowerCase && t.is_fixed && t.date?.startsWith(selectedMonth));
+    const despesasPrincipaisDoBanco = transactions.filter(t => t.metodo_pagamento?.toLowerCase() === bancoNomeLowerCase && !t.is_fixed);
+    const idsDespesasVariaveis = despesasPrincipaisDoBanco.map(d => d.id);
+
+    const parcelasVariaveis = allParcelas
+      .filter(p => idsDespesasVariaveis.includes(p.despesa_id) && p.data_parcela?.startsWith(selectedMonth))
+      .map(p => {
+        const despesaPrincipal = despesasPrincipaisDoBanco.find(d => d.id === p.despesa_id);
+        return { ...despesaPrincipal, ...p, id: p.id };
+      });
+
+    const todasAsDespesas = [...despesasFixas, ...parcelasVariaveis];
+    
+    const filtered = searchTerm
+      ? todasAsDespesas.filter(d => d.description?.toLowerCase().includes(searchTerm.toLowerCase()))
+      : todasAsDespesas;
+
+    return filtered.sort((a, b) => new Date(b.data_parcela || b.date) - new Date(a.data_parcela || a.date));
+  }, [banco, selectedMonth, transactions, allParcelas, searchTerm]);
+
+  // ✅ 3. CÁLCULOS DE PAGINAÇÃO FEITOS AQUI.
+  const totalPages = Math.ceil(despesasDoMes.length / itemsPerPage);
+  const currentData = despesasDoMes.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // ✅ 4. FUNÇÕES DE NAVEGAÇÃO DEFINIDAS AQUI.
+  const nextPage = () => {
+    setCurrentPage((current) => Math.min(current + 1, totalPages));
   };
 
-  const handleEditDespesa = (despesa) => {
-    showModal('novaDespesa', { despesaParaEditar: despesa, onSave: handleSaveDespesa });
+  const prevPage = () => {
+    setCurrentPage((current) => Math.max(current - 1, 1));
   };
 
+  const handleSaveDespesa = () => { hideModal(); fetchData(); };
+  const handleEditDespesa = (despesa) => { showModal('novaDespesa', { despesaParaEditar: despesa, onSave: handleSaveDespesa }); };
   const handleDeleteDespesa = (despesa) => {
-    // 1. Primeiro log: Verifica se a função foi chamada e qual despesa recebeu.
-    console.log('handleDeleteDespesa foi chamada com:', despesa);
-
     showModal('confirmation', {
       title: 'Confirmar Exclusão',
-      description: `Tem certeza que deseja excluir a despesa "${despesa.description || despesa.descricao}"? Esta ação não pode ser desfeita.`,
-      confirmText: 'Sim, Excluir',
-      onConfirm: async () => {
-        // 2. Segundo log: Confirma que o callback onConfirm foi ativado.
-        console.log('Confirmação de exclusão recebida para a despesa:', despesa);
-        
-        try {
-          // 3. Tentativa de exclusão.
-          await deleteDespesa(despesa); // Chama a função de exclusão do contexto
-          
-          // 4. Log de sucesso antes de atualizar os dados.
-          console.log('Despesa excluída com sucesso! Atualizando a lista...');
-          fetchData();                   // Atualiza a interface
-        } catch (error) {
-          // 5. Log de erro: Se algo der errado na função deleteDespesa, será capturado aqui.
-          console.error('Ocorreu um erro ao tentar excluir a despesa:', error);
-        }
-      }
+      description: `Tem certeza que deseja excluir a despesa "${despesa.description || despesa.descricao}"?`,
+      onConfirm: async () => { await deleteDespesa(despesa); fetchData(); }
     });
   };
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in-down">
-      <Button variant="ghost" onClick={onBack} className="mb-4 gap-2">
-        <ArrowLeft className="h-4 w-4" />
-        Voltar
-      </Button>
-
+      <Button variant="ghost" onClick={onBack} className="mb-4 gap-2"> <ArrowLeft className="h-4 w-4" /> Voltar </Button>
       <div className="flex justify-center">
-        <CartaoPersonalizado
-          banco={banco}
-          saldo={getSaldoPorBanco(banco, selectedMonth)}
-          isSelected={true}
-        />
+        <CartaoPersonalizado banco={banco} saldo={getSaldoPorBanco(banco, selectedMonth)} isSelected={true} />
       </div>
-
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Transações de {banco.nome}</CardTitle>
-          <Button onClick={() => showModal('novaDespesa', { onSave: handleSaveDespesa })} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nova Despesa
-          </Button>
+        <CardHeader>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <CardTitle>Transações de {banco.nome}</CardTitle>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <SearchBar searchTerm={searchTerm} setSearchTerm={setSearchTerm} placeholder="Buscar transação..." />
+              <Button onClick={() => showModal('novaDespesa', { onSave: handleSaveDespesa })} className="gap-2">
+                <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Nova Despesa</span>
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <ListaTransacoes 
-            bancoNome={banco.nome}
-            selectedMonth={selectedMonth}
-            onEdit={handleEditDespesa}
-            onDelete={handleDeleteDespesa}
-          />
+          <ListaTransacoes transactions={currentData} onEdit={handleEditDespesa} onDelete={handleDeleteDespesa} />
+          {totalPages > 1 && (
+            <div className="flex items-center justify-end space-x-2 pt-4">
+              <span className="text-sm text-muted-foreground"> Página {currentPage} de {totalPages} </span>
+              {/* ✅ 5. BOTÕES AGORA USAM AS FUNÇÕES LOCAIS */}
+              <Button variant="outline" size="sm" onClick={prevPage} disabled={currentPage === 1}>
+                <ChevronLeft className="h-4 w-4" /> Anterior
+              </Button>
+              <Button variant="outline" size="sm" onClick={nextPage} disabled={currentPage === totalPages}>
+                Próximo <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
