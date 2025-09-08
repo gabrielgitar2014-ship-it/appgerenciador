@@ -13,7 +13,7 @@ import {
   X,
   RotateCw,
   Trash2,
-  LogOut
+  
 } from 'lucide-react';
 
 const TABS_CONFIG = {
@@ -46,7 +46,7 @@ export default function Sidebar({
   onSync,
   onClearData,
   loading,
-  onLogout,
+  
 }) {
   const { theme, setTheme } = useTheme();
   const [syncStatus, setSyncStatus] = useState({ active: false, message: '', type: '' });
@@ -134,10 +134,8 @@ export default function Sidebar({
               </button>
             </li>
             <li>
-              <button onClick={onLogout} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 font-medium rounded-lg">
-                <LogOut className="h-5 w-5" />
-                Sair
-              </button>
+
+              
             </li>
           </ul>
         </nav>
