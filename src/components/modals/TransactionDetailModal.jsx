@@ -1,4 +1,4 @@
-// ARQUIVO: src/components/modals/TransactionDetailModal.jsx (VERSÃO MELHORADA)
+// ARQUIVO: src/components/modals/TransactionDetailModal.jsx (VERSÃO CORRIGIDA)
 
 import React from 'react';
 
@@ -12,7 +12,7 @@ const formatCurrency = (value) =>
 const formatDate = (dateString) => {
     if (!dateString) return "N/A";
     const date = new Date(dateString);
-    return date.toLocaleDateString("pt-BR", {
+    return date.toLocaleString("pt-BR", {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -42,7 +42,9 @@ export default function TransactionDetailModal({
   const isIncome = transaction.type === "income";
 
   const handleDelete = () => {
-    onDelete(transaction.id);
+    // ✅ CORREÇÃO AQUI:
+    // Passa o objeto 'transaction' completo, em vez de apenas 'transaction.id'.
+    onDelete(transaction);
   };
 
   return (
