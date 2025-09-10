@@ -3,53 +3,104 @@ import { supabase } from '../../supabaseClient';
 import CalculadoraModal from './CalculadoraModal';
 import { METODOS_DE_PAGAMENTO } from '../../constants/paymentMethods';
 
-// Função corrigida para pegar a data local em formato ISO sem erros de fuso horário
+/* ========================= Helpers ========================= */
+
+// Data local (YYYY-MM-DD) sem problemas de fuso
 const getTodayLocalISO = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, '0');
+  const d = String(today.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
-// Função para pegar o mês atual em formato ISO
+// Para <input type="month">
 const getCurrentMonthISO = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}`;
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
 };
+
+// Converte "YYYY-MM" -> "YYYY-MM-01"
+const toFirstDay = (ym) => (ym && ym.length === 7 ? `${ym}-01` : ym);
+
+// Extrai "YYYY-MM" de uma data ISO completa p/ preencher o <input type="month">
+const toMonthInput = (d) => (d ? String(d).slice(0, 7) : getCurrentMonthISO());
+
+// Compara as “jan/2025” dos dois lados para definir inicia_proximo_mes
+const isStartAfterPurchaseMonth = (mesInicioYYYYMMDD, dataCompraYYYYMMDD) => {
+  if (!mesInicioYYYYMMDD || !dataCompraYYYYMMDD) return false;
+  const a = new Date(`${String(mesInicioYYYYMMDD).slice(0,7)}-01`);
+  const b = new Date(`${String(dataCompraYYYYMMDD).slice(0,7)}-01`);
+  return a > b;
+};
+
+// Arredonda 2 casas
+const round2 = (x) => Math.round((x + Number.EPSILON) * 100) / 100;
+
+// Cria array de parcelas a partir do total, n e data inicial (YYYY-MM-01)
+const buildParcelas = ({ despesaId, total, n, startDateYYYYMMDD }) => {
+  const parcelas = [];
+  const per = round2(total / n);
+  const partial = round2(per * (n - 1));
+  const last = round2(total - partial);
+
+  const start = new Date(startDateYYYYMMDD);
+  for (let k = 1; k <= n; k++) {
+    const d = new Date(start);
+    d.setMonth(d.getMonth() + (k - 1));
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = '01';
+    parcelas.push({
+      despesa_id: despesaId,
+      numero_parcela: k,
+      amount: k < n ? per : last,
+      data_parcela: `${yyyy}-${mm}-${dd}`,
+      paga: false,
+    });
+  }
+  return parcelas;
+};
+
+/* ============== Estado inicial (novo/edição) ============== */
 
 const getInitialState = (despesaParaEditar = null) => {
   if (despesaParaEditar) {
-    const mesInicio = despesaParaEditar.mes_inicio_cobranca || getCurrentMonthISO(new Date(despesaParaEditar.data_compra + 'T00:00:00'));
+    const parcelado = !!despesaParaEditar.is_parcelado || (despesaParaEditar.qtd_parcelas || 1) > 1;
     return {
-      amount: despesaParaEditar.amount || '',
-      description: despesaParaEditar.description || '',
-      metodo_pagamento: despesaParaEditar.metodo_pagamento || METODOS_DE_PAGAMENTO[0],
-      data_compra: despesaParaEditar.data_compra || '',
-      isParcelado: despesaParaEditar.qtd_parcelas > 1,
-      qtd_parcelas: despesaParaEditar.qtd_parcelas > 1 ? despesaParaEditar.qtd_parcelas : '',
-      mes_inicio_cobranca: mesInicio,
+      amount: despesaParaEditar.amount ?? '',
+      description: despesaParaEditar.description ?? '',
+      metodo_pagamento: despesaParaEditar.metodo_pagamento ?? METODOS_DE_PAGAMENTO?.[0] ?? 'Itaú',
+      data_compra: despesaParaEditar.data_compra ?? getTodayLocalISO(),
+      isParcelado: parcelado,
+      qtd_parcelas: parcelado ? (despesaParaEditar.qtd_parcelas ?? 2) : '',
+      mes_inicio_cobranca: toMonthInput(despesaParaEditar.mes_inicio_cobranca),
+      user_phone: despesaParaEditar.user_phone ?? '',
+      category: despesaParaEditar.category ?? '',
     };
   }
-  
   return {
     amount: '',
     description: '',
-    metodo_pagamento: METODOS_DE_PAGAMENTO[0],
+    metodo_pagamento: METODOS_DE_PAGAMENTO?.[0] ?? 'Itaú',
     data_compra: getTodayLocalISO(),
     isParcelado: false,
     qtd_parcelas: '',
     mes_inicio_cobranca: getCurrentMonthISO(),
+    user_phone: '',
+    category: '',
   };
 };
+
+/* ====================== Componente ========================= */
 
 export default function NovaDespesaModal({ onClose, onSave, despesaParaEditar }) {
   const [formData, setFormData] = useState(() => getInitialState(despesaParaEditar));
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const isEditMode = Boolean(despesaParaEditar);
+  const isEdit = !!despesaParaEditar?.id;
 
   useEffect(() => {
     setFormData(getInitialState(despesaParaEditar));
@@ -57,146 +108,298 @@ export default function NovaDespesaModal({ onClose, onSave, despesaParaEditar })
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    setFormData((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
-  const handleCalculatorConfirm = (calculatedValue) => {
-    setFormData(prev => ({ ...prev, amount: calculatedValue }));
+  const handleCalculatorResult = (valorCalculado, parcelas) => {
+    // valorCalculado = total; se quiser usar "parcela x qtd", faça aqui.
+    setFormData((prev) => ({
+      ...prev,
+      amount: String(valorCalculado ?? prev.amount),
+      isParcelado: parcelas > 1,
+      qtd_parcelas: parcelas > 1 ? String(parcelas) : '',
+    }));
+    setIsCalculatorOpen(false);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSaving(true);
-
-    const dadosParaSalvar = {
-        amount: parseFloat(formData.amount),
-        description: formData.description,
-        metodo_pagamento: formData.metodo_pagamento,
-        data_compra: formData.data_compra,
-        qtd_parcelas: formData.isParcelado ? parseInt(formData.qtd_parcelas) : 1,
-        mes_inicio_cobranca: formData.mes_inicio_cobranca,
-    };
+    if (isSaving) return;
 
     try {
-      if (isEditMode) {
-        // ... (sua lógica de edição aqui)
+      setIsSaving(true);
+
+      const is_parcelado = !!formData.isParcelado;
+      const qtd_parcelas = is_parcelado
+        ? Math.max(2, parseInt(formData.qtd_parcelas || '2', 10))
+        : 1;
+
+      const mes_inicio_db = toFirstDay(formData.mes_inicio_cobranca);
+      const amountNumber = round2(parseFloat(String(formData.amount).replace(',', '.')) || 0);
+
+      if (!amountNumber || amountNumber <= 0) {
+        alert('Informe um valor (amount) válido.');
+        setIsSaving(false);
+        return;
       }
 
-      const { data: despesaCriada, error } = await supabase.from('despesas').insert([dadosParaSalvar]).select().single();
-      if (error) throw error;
+      if (is_parcelado && (!qtd_parcelas || qtd_parcelas < 2)) {
+        alert('Informe a quantidade de parcelas (>= 2) para despesas parceladas.');
+        setIsSaving(false);
+        return;
+      }
 
-      const parcelasArray = [];
-      const totalAmount = parseFloat(formData.amount);
-      const totalParcelas = dadosParaSalvar.qtd_parcelas;
-      
-      const [anoCobranca, mesCobranca] = formData.mes_inicio_cobranca.split('-');
-      const diaDaCompra = new Date(formData.data_compra + 'T00:00:00').getDate();
-      
-      const ultimoDiaDoMesDestino = new Date(anoCobranca, parseInt(mesCobranca), 0).getDate();
-      const diaParaUsar = Math.min(diaDaCompra, ultimoDiaDoMesDestino);
-      
-      let dataBaseParaParcela = new Date(Date.UTC(anoCobranca, parseInt(mesCobranca) - 1, diaParaUsar));
+      const inicia_proximo_mes = isStartAfterPurchaseMonth(mes_inicio_db, formData.data_compra);
 
-      let somaDasParcelasAcumulada = 0;
-      for (let i = 0; i < totalParcelas; i++) {
-        const dataParcelaAtual = new Date(dataBaseParaParcela);
-        dataParcelaAtual.setUTCMonth(dataBaseParaParcela.getUTCMonth() + i);
-        
-        let valorParcelaAtual;
-        if (i === totalParcelas - 1) {
-          valorParcelaAtual = (totalAmount - somaDasParcelasAcumulada).toFixed(2);
+      // Monte o payload exatamente como o schema espera (snake_case)
+      const dadosParaSalvar = {
+        amount: amountNumber,                      // numeric(10,2)
+        description: formData.description?.trim(),// text
+        metodo_pagamento: formData.metodo_pagamento, // text
+        data_compra: formData.data_compra,        // DATE (YYYY-MM-DD)
+        is_parcelado,                              // boolean
+        qtd_parcelas,                              // integer
+        mes_inicio_cobranca: mes_inicio_db,        // DATE (YYYY-MM-01)
+        inicia_proximo_mes,                        // boolean
+        user_phone: formData.user_phone || null,   // se existir no schema
+        category: formData.category || null,       // se existir no schema
+      };
+
+      // ===== Persistência =====
+      let despesaId = despesaParaEditar?.id ?? null;
+
+      if (onSave) {
+        // Se o pai quiser salvar por conta própria:
+        const payload = { ...dadosParaSalvar, id: despesaId || undefined };
+        await onSave(payload);
+        // supondo que onSave atualize/retorne id; se não tiver, busque ou ignore
+        // aqui vamos seguir gerando parcelas só se o pai não cuidar disso
+      } else {
+        if (isEdit) {
+          const { data, error } = await supabase
+            .from('despesas') // ajuste o nome da tabela se for diferente
+            .update(dadosParaSalvar)
+            .eq('id', despesaId)
+            .select('id')
+            .single();
+          if (error) throw error;
+          despesaId = data.id;
         } else {
-          valorParcelaAtual = Math.floor((totalAmount / totalParcelas) * 100) / 100;
-          somaDasParcelasAcumulada += valorParcelaAtual;
+          const { data, error } = await supabase
+            .from('despesas')
+            .insert(dadosParaSalvar)
+            .select('id')
+            .single();
+          if (error) throw error;
+          despesaId = data.id;
         }
-
-        parcelasArray.push({
-          despesa_id: despesaCriada.id,
-          numero_parcela: i + 1,
-          amount: parseFloat(valorParcelaAtual),
-          data_parcela: dataParcelaAtual.toISOString().split('T')[0],
-          paga: false,
-        });
       }
-      
-      const { error: errorParcelas } = await supabase.from('parcelas').insert(parcelasArray);
-      if (errorParcelas) throw errorParcelas;
-      
-      onSave(despesaCriada, formData.mes_inicio_cobranca);
+
+      // Sempre (re)gerar parcelas locais a partir do que foi salvo
+      const parcelas = buildParcelas({
+        despesaId,
+        total: amountNumber,
+        n: qtd_parcelas,
+        startDateYYYYMMDD: mes_inicio_db,
+      });
+
+      if (!onSave) {
+        // Se persistimos via supabase aqui, sincronize a tabela "parcelas"
+        // Na edição, apaga as antigas e recria:
+        if (isEdit) {
+          const { error: delErr } = await supabase
+            .from('parcelas')
+            .delete()
+            .eq('despesa_id', despesaId);
+          if (delErr) throw delErr;
+        }
+        const { error: insErr } = await supabase.from('parcelas').insert(parcelas);
+        if (insErr) throw insErr;
+      }
+
+      alert(isEdit ? 'Despesa atualizada com sucesso.' : 'Despesa criada com sucesso.');
+      setIsSaving(false);
+      onClose?.();
 
     } catch (err) {
-      console.error('Erro detalhado ao salvar despesa:', err);
-      alert('Não foi possível salvar a despesa.');
-    } finally {
-        setIsSaving(false);
+      console.error('Erro ao salvar despesa:', err);
+      alert(`Erro ao salvar: ${err?.message || err}`);
+      setIsSaving(false);
     }
   };
 
-  const modalTitle = isEditMode ? 'Editar Despesa' : 'Nova Despesa';
-  const submitButtonText = isSaving ? 'A salvar...' : (isEditMode ? 'Salvar Alterações' : 'Salvar Despesa');
+  const submitButtonText = isEdit ? 'Salvar alterações' : 'Adicionar despesa';
 
   return (
     <>
-      <CalculadoraModal isOpen={isCalculatorOpen} onClose={() => setIsCalculatorOpen(false)} onConfirm={handleCalculatorConfirm} />
-      <div className="fixed inset-0 bg-transparent flex justify-center items-center z-50 p-4">
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-2xl w-11/12 md:w-1/2 lg:w-1/3 flex flex-col max-h-[90vh] animate-fade-in-down">
-          <h2 className="text-2xl font-bold text-gray-800 p-6 pb-4">{modalTitle}</h2>
-          <div className="flex-1 overflow-y-auto px-6">
-            <div className="space-y-4">
+      {/* Modal de calculadora opcional */}
+      {isCalculatorOpen && (
+        <CalculadoraModal
+          onClose={() => setIsCalculatorOpen(false)}
+          onConfirm={handleCalculatorResult}
+        />
+      )}
+
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="bg-white w-full max-w-xl rounded-2xl shadow-xl p-6">
+          <h2 className="text-xl font-semibold mb-4">
+            {isEdit ? 'Editar despesa' : 'Nova despesa'}
+          </h2>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Descrição</label>
+              <input
+                type="text"
+                name="description"
+                className="w-full border rounded-lg px-3 py-2"
+                value={formData.description}
+                onChange={handleInputChange}
+                placeholder="ex.: Mercado / Assinatura / Serviço"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="amount" className="block text-sm font-medium text-gray-700">Valor (R$)</label>
-                <div className="mt-1 flex items-center gap-2">
-                    <input type="number" name="amount" id="amount" value={formData.amount} onChange={handleInputChange} className="block w-full border rounded-md py-2 px-3" placeholder="0.00" step="0.01" required />
-                    <button type="button" onClick={() => setIsCalculatorOpen(true)} className="p-2 bg-gray-200 rounded-md hover:bg-gray-300" title="Usar calculadora">
-                        <span className="material-symbols-outlined">calculate</span>
-                    </button>
-                </div>
-              </div>
-              <div>
-                <label htmlFor="description" className="block text-sm font-medium text-gray-700">Descrição</label>
-                <input type="text" name="description" id="description" value={formData.description} onChange={handleInputChange} className="mt-1 block w-full border rounded-md py-2 px-3" placeholder="Ex: Almoço" required />
-              </div>
-              <div>
-                <label htmlFor="metodo_pagamento" className="block text-sm font-medium text-gray-700">Método de Pagamento</label>
-                <select name="metodo_pagamento" id="metodo_pagamento" value={formData.metodo_pagamento} onChange={handleInputChange} className="mt-1 block w-full border rounded-md py-2 px-3">
-                  {METODOS_DE_PAGAMENTO.map(metodo => <option key={metodo} value={metodo}>{metodo}</option>)}
-                </select>
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="data_compra" className="block text-sm font-medium text-gray-700">Data da Compra</label>
-                  <input type="date" name="data_compra" id="data_compra" value={formData.data_compra} onChange={handleInputChange} className="mt-1 block w-full border rounded-md py-2 px-3" required />
-                </div>
-                <div>
-                  <label htmlFor="mes_inicio_cobranca" className="block text-sm font-medium text-gray-700">Mês da Cobrança</label>
-                  <input type="month" name="mes_inicio_cobranca" id="mes_inicio_cobranca" value={formData.mes_inicio_cobranca} onChange={handleInputChange} className="mt-1 block w-full border rounded-md py-2 px-3" required />
-                </div>
+                <label className="block text-sm font-medium mb-1">Valor (total)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  name="amount"
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={formData.amount}
+                  onChange={handleInputChange}
+                  placeholder="0.00"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsCalculatorOpen(true)}
+                  className="mt-2 text-sm underline text-blue-600"
+                >
+                  Abrir calculadora (parcela × qtd)
+                </button>
               </div>
 
-              <div className="flex items-center pt-2">
-                <input id="isParcelado" name="isParcelado" type="checkbox" checked={formData.isParcelado} onChange={handleInputChange} className="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                <label htmlFor="isParcelado" className="ml-2 block text-sm text-gray-900">Compra parcelada</label>
+              <div>
+                <label className="block text-sm font-medium mb-1">Método de pagamento</label>
+                <select
+                  name="metodo_pagamento"
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={formData.metodo_pagamento}
+                  onChange={handleInputChange}
+                >
+                  {(METODOS_DE_PAGAMENTO || ['Itaú', 'Bradesco']).map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
               </div>
-              
-              {formData.isParcelado && (
-                <div className="animate-fade-in">
-                  <label htmlFor="qtd_parcelas" className="block text-sm font-medium text-gray-700">Quantidade de Parcelas</label>
-                  <input type="number" name="qtd_parcelas" id="qtd_parcelas" value={formData.qtd_parcelas} onChange={handleInputChange} className="mt-1 block w-full border rounded-md py-2 px-3" placeholder="Ex: 12" min="2" step="1" required />
-                </div>
-              )}
             </div>
-          </div>
-          <div className="mt-4 p-6 pt-4 border-t">
-            <div className="flex justify-end space-x-3">
-                <button type="button" onClick={onClose} className="bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-lg hover:bg-gray-300">
-                  Cancelar
-                </button>
-                <button onClick={handleSubmit} disabled={isSaving} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg disabled:bg-blue-400">
-                  {submitButtonText}
-                </button>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Data da compra</label>
+                <input
+                  type="date"
+                  name="data_compra"
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={formData.data_compra}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Mês de cobrança</label>
+                <input
+                  type="month"
+                  name="mes_inicio_cobranca"
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={formData.mes_inicio_cobranca}
+                  onChange={handleInputChange}
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Será salvo como primeiro dia do mês (YYYY-MM-01).
+                </p>
+              </div>
             </div>
-          </div>
+
+            <div className="grid grid-cols-2 gap-4 items-start">
+              <div className="flex items-center space-x-2">
+                <input
+                  id="isParcelado"
+                  type="checkbox"
+                  name="isParcelado"
+                  checked={!!formData.isParcelado}
+                  onChange={handleInputChange}
+                />
+                <label htmlFor="isParcelado" className="text-sm font-medium">
+                  Parcelado?
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Qtd. parcelas</label>
+                <input
+                  type="number"
+                  name="qtd_parcelas"
+                  className="w-full border rounded-lg px-3 py-2"
+                  min={formData.isParcelado ? 2 : 1}
+                  step="1"
+                  value={formData.isParcelado ? (formData.qtd_parcelas || '') : ''}
+                  onChange={handleInputChange}
+                  disabled={!formData.isParcelado}
+                  placeholder={formData.isParcelado ? 'ex.: 6' : '1'}
+                />
+              </div>
+            </div>
+
+            {/* Campos opcionais, caso existam no schema */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Categoria (opcional)</label>
+                <input
+                  type="text"
+                  name="category"
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={formData.category}
+                  onChange={handleInputChange}
+                  placeholder=""
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Telefone (opcional)</label>
+                <input
+                  type="text"
+                  name="user_phone"
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={formData.user_phone}
+                  onChange={handleInputChange}
+                  placeholder=""
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-lg hover:bg-gray-300"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-blue-400"
+              >
+                {isEdit ? 'Salvar alterações' : 'Adicionar despesa'}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </>
