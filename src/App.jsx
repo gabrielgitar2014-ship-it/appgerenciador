@@ -7,13 +7,13 @@ import PwaUpdater from './components/PwaUpdater';
 function App() {
   return (
     <ThemeProvider>
-      {/* 👇 A ORDEM FOI INVERTIDA AQUI 👇 */}
-      <ModalProvider>
-        <FinanceProvider>
+      {/* 👇 A ORDEM FOI CORRIGIDA AQUI 👇 */}
+      <FinanceProvider>
+        <ModalProvider>
           <PwaUpdater />
           <Dashboard />
-        </FinanceProvider>
-      </ModalProvider>
+        </ModalProvider>
+      </FinanceProvider>
     </ThemeProvider>
   );
 }
