@@ -1,11 +1,12 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
-import { useModal } from './ModalContext';
+import { useModal } from './ModalContext'; // ✅ IMPORTAÇÃO ADICIONADA
 import { supabase } from '../supabaseClient';
 
 const FinanceContext = createContext();
 
 export function FinanceProvider({ children }) {
-  const { showModal } = useModal();
+  // A chamada a useModal foi removida daqui para evitar erros de contexto
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [bancos, setBancos] = useState([]);
@@ -54,9 +55,7 @@ export function FinanceProvider({ children }) {
     fetchData();
   }, [fetchData]);
 
-  // ✅ FUNÇÃO FALTANDO ADICIONADA AQUI
   const saveFixedExpense = async (expenseData) => {
-    // Modo de Edição: se o objeto já tem um ID
     if (expenseData.id) {
       const { data, error } = await supabase
         .from('transactions')
@@ -76,20 +75,15 @@ export function FinanceProvider({ children }) {
       }
       return data;
     } 
-    
-    // Modo de Criação: se não tem ID
     else {
       const { description, amount, bank, dueDate, startDate, recurrence } = expenseData;
       const [year, month] = startDate.split('-').map(Number);
-      
       const transactionsToInsert = [];
       const numInstallments = recurrence.type === 'infinite' ? 120 : recurrence.installments;
 
       for (let i = 0; i < numInstallments; i++) {
         const transactionDate = new Date(year, month - 1 + i, dueDate);
-        
         const formattedDate = `${transactionDate.getFullYear()}-${String(transactionDate.getMonth() + 1).padStart(2, '0')}-${String(transactionDate.getDate()).padStart(2, '0')}`;
-        
         transactionsToInsert.push({
           description,
           amount,
@@ -129,24 +123,25 @@ export function FinanceProvider({ children }) {
             alert(`Erro do Supabase: ${error.message}`);
         }
     } else {
-      const despesaId = despesaObject.despesa_id;
-      if (!despesaId) {
-        console.error("Objeto da despesa não contém 'despesa_id'", despesaObject);
+      const despesaIdParaExcluir = despesaObject.despesa_id || despesaObject.id;
+
+      if (!despesaIdParaExcluir) {
+        console.error("Não foi possível determinar o ID principal da despesa para exclusão.", despesaObject);
         alert("Erro: Não foi possível identificar a despesa principal para excluir.");
         return;
       }
       
-      const { error: parcelasError } = await supabase.from('parcelas').delete().eq('despesa_id', despesaId);
+      const { error: parcelasError } = await supabase.from('parcelas').delete().eq('despesa_id', despesaIdParaExcluir);
       if (parcelasError) {
         console.error("Erro ao deletar parcelas:", parcelasError);
-        alert(`Erro: ${parcelasError.message}`);
+        alert(`Erro ao deletar parcelas: ${parcelasError.message}`);
         return;
       }
 
-      const { error: despesaError } = await supabase.from('despesas').delete().eq('id', despesaId);
+      const { error: despesaError } = await supabase.from('despesas').delete().eq('id', despesaIdParaExcluir);
       if (despesaError) {
         console.error("Erro ao deletar despesa principal:", despesaError);
-        alert(`Erro: ${despesaError.message}`);
+        alert(`Erro ao deletar despesa: ${despesaError.message}`);
       }
     }
   };
@@ -186,7 +181,7 @@ export function FinanceProvider({ children }) {
     bancos,
     getSaldoPorBanco,
     deleteDespesa,
-    saveFixedExpense, // Agora esta linha tem uma função correspondente para exportar
+    saveFixedExpense,
   };
 
   return (
