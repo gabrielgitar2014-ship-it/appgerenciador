@@ -1,136 +1,117 @@
-// ARQUIVO: src/components/modals/TransactionDetailModal.jsx (VERSÃO CORRIGIDA)
+import React, { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Edit, Trash2, X, Calendar, CreditCard, DollarSign, ListChecks } from 'lucide-react';
+import ParcelamentoDetalhesModal from './ParcelamentoDetalhesModal'; // ✅ 1. Importa o novo modal
 
-import React from 'react';
-
-// --- Funções Auxiliares (fora do componente para melhor performance) ---
-const formatCurrency = (value) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value || 0);
-
+// Funções auxiliares
 const formatDate = (dateString) => {
-    if (!dateString) return "N/A";
-    const date = new Date(dateString);
-    return date.toLocaleString("pt-BR", {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      timeZone: 'UTC',
-    });
+  if (!dateString) return 'N/A';
+  return new Date(dateString + 'T00:00:00').toLocaleDateString('pt-BR');
 };
 
-// --- Componente Auxiliar para Itens de Detalhe (melhora o layout) ---
-const DetailItem = ({ icon, label, children }) => (
-  <div className="flex items-center text-gray-700 py-2">
-    <span className="material-symbols-outlined text-gray-500 mr-3">{icon}</span>
-    <span className="font-semibold w-2/5">{label}:</span>
-    <span className="w-3/5">{children}</span>
-  </div>
-);
+const formatCurrency = (value) => {
+  const numberValue = Number(value);
+  if (isNaN(numberValue)) return 'R$ 0,00';
+  return numberValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
 
-export default function TransactionDetailModal({
-  isOpen,
-  onClose,
-  onBack,
-  transaction,
-  onDelete,
-  onEdit,
-}) {
+// Componente para um item de detalhe
+function DetailRow({ icon: Icon, label, value }) {
+  return (
+    <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-700">
+      <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+        <Icon className="h-4 w-4" />
+        <span>{label}</span>
+      </div>
+      <span className="font-medium text-sm text-slate-800 dark:text-slate-200 text-right">{value}</span>
+    </div>
+  );
+}
+
+export default function TransactionDetailModal({ isOpen, onClose, transaction, onEdit, onDelete }) {
+  // ✅ 2. Adiciona um estado para controlar o modal de parcelamento
+  const [showParcelasModal, setShowParcelasModal] = useState(false);
+
   if (!isOpen || !transaction) return null;
 
-  const isIncome = transaction.type === "income";
+  const dataVencimento = transaction.date || transaction.data_parcela || transaction.data_compra;
+  const subDescricao = transaction.parcelaInfo || '';
+  const isIncome = transaction.type === 'income';
 
-  const handleDelete = () => {
-    // ✅ CORREÇÃO AQUI:
-    // Passa o objeto 'transaction' completo, em vez de apenas 'transaction.id'.
-    onDelete(transaction);
-  };
+  // Verifica se a transação é parcelada para mostrar o botão
+  const isParcelada = transaction.is_parcelado || (transaction.qtd_parcelas && transaction.qtd_parcelas > 1);
 
   return (
-    <div className="fixed inset-0 bg-black bg-transparent z-50 flex justify-center items-center p-4 transition-opacity duration-300">
-      <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-lg animate-fade-in-up">
-        
-        {/* CABEÇALHO */}
-        <div className="flex justify-between items-center pb-3 border-b mb-4">
-          {onBack && (
-            <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-100">
-              <span className="material-symbols-outlined text-gray-600">arrow_back</span>
-            </button>
-          )}
-          <h2 className="text-xl font-bold text-gray-800 text-center flex-1 mx-4 truncate" title={transaction.description}>
-            {transaction.description}
-          </h2>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
-            <span className="material-symbols-outlined text-gray-600">close</span>
-          </button>
-        </div>
-
-        {/* CORPO COM DETALHES */}
-        <div className="space-y-1">
-          <DetailItem icon="paid" label={isIncome ? "Valor Recebido" : "Valor da Parcela"}>
-            <span className={`font-bold text-lg ${isIncome ? "text-green-600" : "text-red-600"}`}>
-              {formatCurrency(transaction.amount)}
-            </span>
-          </DetailItem>
-
-          <DetailItem icon="calendar_month" label="Data de Vencimento">
-            {formatDate(transaction.date)}
-          </DetailItem>
-          
-          {transaction.metodo_pagamento && (
-            <DetailItem icon="credit_card" label="Método">
-              {transaction.metodo_pagamento}
-            </DetailItem>
-          )}
-
-          {/* Exibe o status de 'pago' se disponível */}
-          {typeof transaction.paid === 'boolean' && (
-             <DetailItem icon="task_alt" label="Status">
-                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${transaction.paid ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                    {transaction.paid ? 'Pago' : 'Pendente'}
-                </span>
-            </DetailItem>
-          )}
-
-          {/* Seção de Parcelamento (se aplicável) */}
-          {transaction.isParcelada && (
-            <div className="pt-3 mt-3 border-t">
-              <h3 className="text-md font-bold text-blue-700 mb-2">Detalhes da Compra</h3>
-              <DetailItem icon="shopping_cart" label="Valor Total">
-                <span className="font-semibold">{formatCurrency(transaction.valorTotalCompra)}</span>
-              </DetailItem>
-              <DetailItem icon="calendar_today" label="Data da Compra">
-                {formatDate(transaction.data_compra)}
-              </DetailItem>
-              <DetailItem icon="receipt_long" label="Parcelamento">
-                {transaction.parcelaInfo}
-              </DetailItem>
-              <DetailItem icon="event_repeat" label="Previsão de Término">
-                {transaction.endDate}
-              </DetailItem>
+    <>
+      <div 
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm animate-fade-in" 
+        onClick={onClose} 
+      />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-800 shadow-2xl animate-slide-up">
+          {/* Cabeçalho */}
+          <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+            <div className="flex flex-col overflow-hidden">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white truncate" title={transaction.description}>
+                {transaction.description || "Detalhes da Transação"}
+              </h2>
+              {subDescricao && (
+                <p className="text-sm text-slate-500 dark:text-slate-400">{subDescricao}</p>
+              )}
             </div>
-          )}
-        </div>
+            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full flex-shrink-0">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
 
-        {/* RODAPÉ COM AÇÕES */}
-        <div className="mt-6 flex justify-end gap-4 border-t pt-4">
-          <button
-            onClick={handleDelete}
-            className="flex items-center gap-2 py-2 px-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-          >
-            <span className="material-symbols-outlined">delete</span>
-            Excluir
-          </button>
-          <button
-            onClick={() => onEdit(transaction)}
-            className="flex items-center gap-2 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <span className="material-symbols-outlined">edit</span>
-            Editar
-          </button>
+          {/* Conteúdo */}
+          <div className="p-6 space-y-2">
+            <DetailRow
+              icon={DollarSign}
+              label={isIncome ? "Valor Recebido" : "Valor:"}
+              value={formatCurrency(transaction.amount)}
+            />
+            <DetailRow
+              icon={Calendar}
+              label="Data de Vencimento:"
+              value={formatDate(dataVencimento)}
+            />
+            <DetailRow
+              icon={CreditCard}
+              label="Método:"
+              value={transaction.metodo_pagamento || 'N/A'}
+            />
+            {/* ✅ 3. Adiciona o botão para ver parcelas, se aplicável */}
+            {isParcelada && (
+              <div className="pt-2">
+                <Button variant="outline" onClick={() => setShowParcelasModal(true)} className="w-full gap-2">
+                  <ListChecks className="h-4 w-4" />
+                  Ver Detalhes do Parcelamento
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Rodapé com Botões */}
+          <div className="flex items-center justify-end gap-3 p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-700">
+            <Button variant="destructive" onClick={() => onDelete(transaction)} className="gap-2">
+              <Trash2 className="h-4 w-4" />
+              Excluir
+            </Button>
+            <Button onClick={() => onEdit(transaction)} className="gap-2 bg-blue-600 hover:bg-blue-700">
+              <Edit className="h-4 w-4" />
+              Editar
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* ✅ 4. Renderiza o modal de detalhes do parcelamento quando o estado for 'true' */}
+      <ParcelamentoDetalhesModal
+        open={showParcelasModal}
+        onClose={() => setShowParcelasModal(false)}
+        despesa={transaction}
+      />
+    </>
   );
 }
