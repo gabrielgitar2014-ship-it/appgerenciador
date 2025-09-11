@@ -4,9 +4,10 @@ import { useModal } from '../../context/ModalContext';
 import SummaryCard from '../SummaryCard'; 
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowUp, ArrowDown, Wallet } from 'lucide-react'; 
+import { supabase } from '../../supabaseClient';
 
+// Função auxiliar para determinar a saúde financeira
 const getFinancialHealth = (income, expense) => {
-  // ... (a função getFinancialHealth continua igual)
   if (income === 0 && expense > 0) return { status: "Crítico", style: "bg-gradient-to-br from-slate-800 to-black", message: "Você tem despesas mas nenhuma renda registrada para este mês." };
   if (income === 0) return { status: "Indefinido", style: "bg-slate-500", message: "Nenhuma renda registrada para este mês." };
   const percentage = (expense / income) * 100;
@@ -16,30 +17,64 @@ const getFinancialHealth = (income, expense) => {
   return { status: "Crítico", style: "bg-gradient-to-br from-slate-800 to-black", message: "Alerta! Seus gastos superaram sua renda." };
 };
 
-// ✅ 1. RECEBA 'onHealthCardClick' COMO PROP
 export default function GeneralTab({ selectedMonth, parcelasDoMes, onHealthCardClick }) {
   const { transactions, loading, fetchData } = useFinance();
-  const { showModal, hideModal } = useModal();
+  const { showModal } = useModal();
 
-  const handleSaveDespesa = () => {
-    hideModal();
-    fetchData();
+  // Função correta para salvar DESPESAS
+  const handleSaveDespesa = async (dadosDaDespesa) => {
+    try {
+      let savedData;
+      if (dadosDaDespesa.id) {
+        // Modo Edição
+        const { data, error } = await supabase.from('despesas').update(dadosDaDespesa).eq('id', dadosDaDespesa.id).select().single();
+        if (error) throw error;
+        savedData = data;
+      } else {
+        // Modo Criação
+        const { data, error } = await supabase.from('despesas').insert(dadosDaDespesa).select().single();
+        if (error) throw error;
+        savedData = data;
+      }
+      
+      fetchData(); // Atualiza os dados na tela
+      return savedData; // Retorna os dados salvos para o modal
+
+    } catch (error) {
+      console.error("Erro capturado em handleSaveDespesa:", error);
+      throw error;
+    }
+  };
+
+  // Função correta para salvar RENDAS
+  const handleSaveRenda = async (dadosDaRenda) => {
+    try {
+      let savedData;
+      if (dadosDaRenda.id) {
+        const { data, error } = await supabase.from('transactions').update(dadosDaRenda).eq('id', dadosDaRenda.id).select().single();
+        if (error) throw error;
+        savedData = data;
+      } else {
+        const { data, error } = await supabase.from('transactions').insert({ ...dadosDaRenda, type: 'income' }).select().single();
+        if (error) throw error;
+        savedData = data;
+      }
+      fetchData();
+      return savedData;
+    } catch (error) {
+      console.error("Erro ao salvar renda:", error);
+      throw error;
+    }
   };
 
   const financialSummary = useMemo(() => {
     if (!transactions) return { income: 0, totalExpense: 0, balance: 0 };
-    const income = transactions
-      .filter(t => t.date?.startsWith(selectedMonth) && t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
+    const income = transactions.filter(t => t.date?.startsWith(selectedMonth) && t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
     const fixedExpenses = transactions.filter(t => t.date?.startsWith(selectedMonth) && t.is_fixed && t.type === 'expense');
     const totalFixedExpense = fixedExpenses.reduce((sum, t) => sum + t.amount, 0);
-
     const totalVariableExpense = (parcelasDoMes || []).reduce((sum, p) => sum + p.amount, 0);
-
     const totalExpense = totalFixedExpense + totalVariableExpense;
     const balance = income - totalExpense;
-
     return { income, totalExpense, balance };
   }, [selectedMonth, transactions, parcelasDoMes]);
 
@@ -50,8 +85,8 @@ export default function GeneralTab({ selectedMonth, parcelasDoMes, onHealthCardC
   
   const health = getFinancialHealth(financialSummary.income, financialSummary.totalExpense);
 
-  const handleEditIncome = (income) => showModal('novaRenda', { incomeToEdit: income, onSave: handleSaveDespesa });
-  const handleAddNewIncome = () => showModal('novaRenda', { onSave: handleSaveDespesa }); 
+  const handleEditIncome = (income) => showModal('novaRenda', { incomeToEdit: income, onSave: handleSaveRenda });
+  const handleAddNewIncome = () => showModal('novaRenda', { onSave: handleSaveRenda }); 
   
   return (
     <div className="space-y-6 animate-fade-in-down">
@@ -89,9 +124,8 @@ export default function GeneralTab({ selectedMonth, parcelasDoMes, onHealthCardC
       {loading ? (
         <Skeleton className="h-20 rounded-2xl" />
       ) : (
-        // ✅ 2. FAÇA O CARD SER CLICÁVEL
         <div 
-          onClick={onHealthCardClick} // Chama a função recebida por prop
+          onClick={onHealthCardClick}
           className={`p-5 rounded-2xl shadow-lg text-white ${health.style} cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.99]`}
         >
           <h3 className="font-bold text-lg">{health.status}</h3>
