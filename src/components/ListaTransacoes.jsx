@@ -10,12 +10,10 @@ export const ListaTransacoes = ({ transactions, onEdit, onDelete }) => {
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
-    // Adicionado 'T00:00:00' para garantir que a data seja interpretada como local e não UTC
     return new Date(dateString + 'T00:00:00').toLocaleDateString('pt-BR');
   };
   
   const handleShowDetails = (despesa) => {
-    // Usando o modal 'transactionDetail' que já tem um layout melhor
     showModal('transactionDetail', { 
         transaction: despesa,
         onEdit: () => onEdit(despesa),
@@ -50,9 +48,9 @@ export const ListaTransacoes = ({ transactions, onEdit, onDelete }) => {
             <TableCell className="font-medium">
               <div>{despesa.description || despesa.descricao}</div>
               <div className="text-xs text-muted-foreground flex items-center">
-                <span>{formatDate(despesa.data_compra || despesa.date)}</span>
+                {/* ✅ CORREÇÃO AQUI: Exibe APENAS a data da compra */}
+                <span>{formatDate(despesa.data_compra)}</span>
                 
-                {/* ✅ ALTERAÇÃO AQUI: Exibe a informação da parcela se ela existir */}
                 {despesa.parcelaInfo && (
                   <span className="ml-2 pl-2 border-l border-slate-200 dark:border-slate-700">
                     {despesa.parcelaInfo}
@@ -61,8 +59,7 @@ export const ListaTransacoes = ({ transactions, onEdit, onDelete }) => {
               </div>
             </TableCell>
             
-            <TableCell className={`text-right font-mono text-sm ${despesa.amount < 0 ? 'text-green-500' : 'text-red-600'}`}>
-              {/* Lógica de valor ajustada para o contexto de despesa */}
+            <TableCell className={`text-right font-mono text-sm text-red-600`}>
               - R$ {Math.abs(despesa.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </TableCell>
             
